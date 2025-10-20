@@ -63,3 +63,18 @@ export type {
   ValidationResult,
   ValidationWarning,
 } from './BaseValidator';
+
+// BaseServiceContainer
+export { BaseServiceContainer, ServiceLifetime } from './ServiceContainer';
+export type {
+  ClearParams,
+  HasParams,
+  RegisterParams,
+  ResolveParams,
+  ScopedParams,
+  ServiceFactory,
+  ServiceIdentifier,
+  ServiceName,
+  SingletonParams,
+  TransientParams,
+} from './ServiceContainer';

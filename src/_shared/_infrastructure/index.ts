@@ -28,6 +28,7 @@ export * from '../_base';
 // Implementations
 export { ConsoleLogger } from './ConsoleLogger';
 export type { ConsoleLoggerParams } from './ConsoleLogger';
+export { InversifyServiceContainer } from './InversifyServiceContainer';
 export { MemoryCache } from './MemoryCache';
 export type { MemoryCacheParams } from './MemoryCache';
 export { RuleValidator } from './RuleValidator';

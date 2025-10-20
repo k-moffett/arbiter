@@ -23,20 +23,17 @@
     "dev:docker": "docker compose up --build",
     "dev:stop": "docker compose down",
     "dev:logs": "docker compose logs -f",
-
     "// Build & Production": "=== Build & Production ===",
     "build": "tsc",
     "start": "node dist/index.js",
     "clean": "rm -rf dist",
     "prebuild": "npm run clean",
-
     "// Testing": "=== Testing ===",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage",
     "test:unit": "jest --testPathPattern=unit",
     "test:integration": "jest --config jest.integration.config.js",
-
     "// Code Quality": "=== Code Quality ===",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -44,7 +41,6 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
     "validate": "npm run typecheck && npm run lint && npm run test",
-
     "// Vector Database": "=== Vector Database Management ===",
     "vector:start": "docker compose -f docker-compose.vector.yml up -d",
     "vector:stop": "docker compose -f docker-compose.vector.yml down",
@@ -59,8 +55,10 @@
     "dotenv": "^16.4.5",
     "dotenv-expand": "^11.0.0",
     "fast-xml-parser": "^4.5.3",
+    "inversify": "^7.10.3",
     "pino": "^8.16.0",
     "pino-pretty": "^10.2.3",
+    "reflect-metadata": "^0.2.2",
     "uuid": "^13.0.0",
     "zod": "^4.0.0"
   },
