@@ -64,7 +64,7 @@ export default {
     '^@parsers/(.*)$': '<rootDir>/src/parsers/$1',
     '^@vector/(.*)$': '<rootDir>/src/vector/$1',
     '^@config/(.*)$': '<rootDir>/src/config/$1',
-    '^@shared/(.*)$': '<rootDir>/src/shared/$1'
+    '^@shared/(.*)$': '<rootDir>/src/_shared/$1'
   },
 
   // Setup files

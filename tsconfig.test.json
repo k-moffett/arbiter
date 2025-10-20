@@ -55,7 +55,7 @@
       "@parsers/*": ["src/parsers/*"],
       "@vector/*": ["src/vector/*"],
       "@config/*": ["src/config/*"],
-      "@shared/*": ["src/shared/*"]
+      "@shared/*": ["src/_shared/*"]
     },
 
     // Advanced

@@ -6,10 +6,11 @@
 
 // Placeholder - will be implemented in next phase
 export function main(): void {
-  console.log('Arbiter starting...');
+  console.error('Arbiter starting...');
 }
 
 // Only run if this is the main module
-if (import.meta.url === `file://${process.argv[1]}`) {
+const mainModule = process.argv[1];
+if (mainModule !== undefined && import.meta.url === `file://${mainModule}`) {
   main();
 }

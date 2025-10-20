@@ -1,48 +1,37 @@
 # Base Context — Universal Coding Principles
 
-Language-agnostic principles. Research best practices when unsure.
-
 ## Core Principles
-- **SRP**: One purpose per function/class
-- **KISS**: Simplest working solution
-- **DRY**: Reuse existing code
-- **Readable**: Clear naming
-- **Consistent**: Follow patterns
-- **Document as we build**: Update docs with implementation
+SRP • KISS • DRY • Readable • Consistent
 
-## Before Writing Code
-1. Work with given context - avoid unnecessary searches
-2. Only look up files when specifically needed
-3. Assume patterns are established
-4. Plan implementation
-5. Validate with project tools
-6. Update docs immediately
+## Workflow
+1. Load context 2. Plan 3. Code 4. Validate 5. Document
 
-## Project Planning
-- Create plans: `/create-project-plan`
-- Sync todos with plans using TodoWrite
-- **IMPORTANT**: Update `.claude/aiContext/project/*-plan.md` files when completing tasks
-- Mark tasks with [x] as they complete
-- Update plan Status and Completed fields when done
-- Check plans at start: `/review-config`
+## File Organization
+- **Plans:** `.claude/aiContext/plans/YYYYMMDD-HHMMSS-name.md` (major features >2h)
+- **Summaries:** `.claude/aiContext/summaries/FEATURE-NAME.md` (session insights)
+- **Temp:** `.claude/aiContext/temp/{test,scripts}/` (NEVER in project root, clean up)
+- **Standards:** See `.claude/aiContext/codingStandards/typescript/project-standards.md`
 
 ## Code Quality
-- Use linting tools (ESLint)
-- Run type checking (TypeScript strict)
-- Write tests (80% coverage minimum)
-- Handle errors gracefully
+- ESLint + TypeScript strict mode
+- 80% test coverage
+- No `any` types (use `unknown`)
+- Typed object params only
+- Prefer `null` over `undefined`
+- Run `npm run lint` and `npm run typecheck` after creating or editing any file
+
+## TypeScript
+- **ESM ONLY:** `import/export` (never `require()`)
+- Package: `"type": "module"`
+
+## Security
 - Never commit secrets
-- Validate inputs
-- Test in Docker before deployment
+- Validate all inputs
+- Handle errors gracefully
 
 ## Context Management
 - Load only relevant files
-- Create project context in `aiContext/project/`
-- Avoid context bloat
-- Sub-agents: max 6 parallel
+- Keep baseContext.md < 2KB
+- Max 6 parallel sub-agents
 
-## Quick Checks
-- Simplest approach?
-- Code exists?
-- Follows patterns?
-- Will pass checks?
+**Detailed standards:** `.claude/aiContext/codingStandards/typescript/project-standards.md`

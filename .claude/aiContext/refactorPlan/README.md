@@ -17,9 +17,9 @@ This directory contains the complete refactor plan for transforming Cogitator in
 
 **If you're starting work on Arbiter, read in this order:**
 
-1. **[epic.md](./epic.md)** - Start here. Understand the problem, goals, and architecture vision.
-2. **[reusable-analysis.md](./reusable-analysis.md)** - See what can be copied from Cogitator vs rebuilt.
-3. **[architecture-overview.md](./architecture-overview.md)** - Deep dive into the new architecture.
+1. **[epic.md](epic.md)** - Start here. Understand the problem, goals, and architecture vision.
+2. **[reusable-analysis.md](reusable-analysis.md)** - See what can be copied from Cogitator vs rebuilt.
+3. **[architecture-overview.md](architecture-overview.md)** - Deep dive into the new architecture.
 4. **[tickets/](./tickets/)** - Implementation roadmap (ARB-001 through ARB-007).
 
 ---
@@ -30,21 +30,21 @@ This directory contains the complete refactor plan for transforming Cogitator in
 
 | Document | Purpose | Read Time |
 |----------|---------|-----------|
-| [epic.md](./epic.md) | Epic description: problem statement, goals, technical approach, success criteria | 15 min |
-| [reusable-analysis.md](./reusable-analysis.md) | Component-by-component analysis: what to copy, modify, or rebuild | 20 min |
-| [architecture-overview.md](./architecture-overview.md) | Detailed architecture: HyDE, Self-RAG, tool planning, MCP server | 30 min |
+| [epic.md](epic.md) | Epic description: problem statement, goals, technical approach, success criteria | 15 min |
+| [reusable-analysis.md](reusable-analysis.md) | Component-by-component analysis: what to copy, modify, or rebuild | 20 min |
+| [architecture-overview.md](architecture-overview.md) | Detailed architecture: HyDE, Self-RAG, tool planning, MCP server | 30 min |
 
 ### Implementation Tickets
 
 | Ticket | Description | Status | Effort |
 |--------|-------------|--------|--------|
-| [ARB-001](./tickets/ARB-001-base-repo-setup.md) | Base repository setup | ✅ COMPLETE | 2-4h |
-| [ARB-002](./tickets/ARB-002-context-system.md) | Context system with HyDE, query decomposition, step-back | 🔶 READY | 25-30h |
-| [ARB-003](./tickets/ARB-003-tool-planning.md) | Tool planning engine with LLM-powered selection | 🔶 READY | 12-15h |
-| [ARB-004](./tickets/ARB-004-validation-system.md) | Self-RAG validation with hallucination detection | 🔶 READY | 18-20h |
-| [ARB-005](./tickets/ARB-005-mcp-server.md) | MCP server foundation with tools/resources | 🔶 READY | 10-12h |
-| [ARB-006](./tickets/ARB-006-ingestion-migration.md) | Migrate BattleScribe & PDF ingestion | 🔶 READY | 8-10h |
-| [ARB-007](./tickets/ARB-007-integration-testing.md) | End-to-end testing and validation | 🔶 READY | 10-12h |
+| [ARB-001](tickets/ARB-001-base-repo-setup.md) | Base repository setup | ✅ COMPLETE | 2-4h |
+| [ARB-002](tickets/ARB-002-context-system.md) | Context system with HyDE, query decomposition, step-back | 🔶 READY | 25-30h |
+| [ARB-003](tickets/ARB-003-tool-planning.md) | Tool planning engine with LLM-powered selection | 🔶 READY | 12-15h |
+| [ARB-004](tickets/ARB-004-validation-system.md) | Self-RAG validation with hallucination detection | 🔶 READY | 18-20h |
+| [ARB-005](tickets/ARB-005-mcp-server.md) | MCP server foundation with tools/resources | 🔶 READY | 10-12h |
+| [ARB-006](tickets/ARB-006-ingestion-migration.md) | Migrate BattleScribe & PDF ingestion | 🔶 READY | 8-10h |
+| [ARB-007](tickets/ARB-007-integration-testing.md) | End-to-end testing and validation | 🔶 READY | 10-12h |
 
 **Total Effort**: ~85-103 hours (~2.5 weeks full-time)
 

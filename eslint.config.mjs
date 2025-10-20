@@ -2,28 +2,76 @@ import eslint from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import perfectionist from 'eslint-plugin-perfectionist';
 
+// Import custom rules (ESM)
+import maxClassMethods from './eslint-rules/max-class-methods.js';
+import maxClassProperties from './eslint-rules/max-class-properties.js';
+import maxConditionsPerStatement from './eslint-rules/max-conditions-per-statement.js';
+import noBracketNotation from './eslint-rules/no-bracket-notation.js';
+import noLoggingInLoops from './eslint-rules/no-logging-in-loops.js';
+import noPromiseConstructor from './eslint-rules/no-promise-constructor.js';
+import noSwitchStatement from './eslint-rules/no-switch-statement.js';
+import preferNullOverUndefined from './eslint-rules/prefer-null-over-undefined.js';
+import requireTypedParams from './eslint-rules/require-typed-params.js';
+
 export default tseslint.config(
   {
     ignores: [
+      // Dependencies
       'node_modules/**',
+
+      // Build outputs
       'dist/**',
       'build/**',
       'coverage/**',
-      '**/*.js',
-      '**/*.mjs',
-      '**/*.cjs',
-      '*.config.js',
-      '*.config.mjs',
-      'eslintrc.js',
-      'test/**'
+
+      // Config files (specific files, not all JS/MJS)
+      'eslint.config.mjs',
+      'jest.config.js',
+      'jest.config.mjs',
+      'jest.integration.config.js',
+      'prettier.config.js',
+
+      // ESLint custom rules (meta-code, not application code)
+      'eslint-rules/**',
+
+      // AI-generated temporary files
+      '.claude/aiContext/temp/**',
+
+      // Generated files
+      '**/*.generated.ts',
+      '**/*.generated.js',
+      '**/*.d.ts',
+
+      // Test files
+      'test/**',
+      'test/lint-examples/**',
+
+      // Logs
+      '**/*.log',
     ]
   },
   eslint.configs.recommended,
+  // TypeScript strict type checking
   ...tseslint.configs.strictTypeChecked,
   {
+    // TypeScript files - type checking and strict rules
+    files: ['**/*.ts', '**/*.tsx'],
     plugins: {
       perfectionist,
-      '@typescript-eslint': tseslint.plugin
+      '@typescript-eslint': tseslint.plugin,
+      'local-rules': {
+        rules: {
+          'max-class-methods': maxClassMethods,
+          'max-class-properties': maxClassProperties,
+          'max-conditions-per-statement': maxConditionsPerStatement,
+          'no-bracket-notation': noBracketNotation,
+          'no-logging-in-loops': noLoggingInLoops,
+          'no-promise-constructor': noPromiseConstructor,
+          'no-switch-statement': noSwitchStatement,
+          'prefer-null-over-undefined': preferNullOverUndefined,
+          'require-typed-params': requireTypedParams,
+        },
+      },
     },
     languageOptions: {
       parserOptions: {
@@ -84,9 +132,21 @@ export default tseslint.config(
       'max-depth': ['error', 3],
       'max-nested-callbacks': ['error', 3],
       'max-statements': ['error', 20],  // Increased from 15
+      'max-statements-per-line': ['error', { max: 1 }],
 
       // Complexity rules
       'complexity': ['error', 10],
+
+      // Custom SOLID enforcement rules
+      'local-rules/max-class-methods': ['error', 15],
+      'local-rules/max-class-properties': ['error', 15],
+      'local-rules/max-conditions-per-statement': ['error', { max: 1 }],
+      'local-rules/no-bracket-notation': 'error',
+      'local-rules/no-logging-in-loops': 'error',
+      'local-rules/no-promise-constructor': 'error',
+      'local-rules/no-switch-statement': 'error',
+      'local-rules/prefer-null-over-undefined': 'error',
+      'local-rules/require-typed-params': 'error',
 
       // Line length
       'max-len': ['error', {
@@ -137,7 +197,7 @@ export default tseslint.config(
         ]
       }],
 
-      '@typescript-eslint/max-params': ['error', { max: 4 }],
+      '@typescript-eslint/max-params': ['error', { max: 1 }],  // Enforces typed object pattern
 
       // Naming conventions (relaxed - no "I" prefix requirement)
       '@typescript-eslint/naming-convention': [
@@ -181,6 +241,7 @@ export default tseslint.config(
 
       // TypeScript strict rules
       '@typescript-eslint/no-explicit-any': 'error',
+      '@typescript-eslint/no-require-imports': 'error',  // ESM only - no require()
       '@typescript-eslint/explicit-function-return-type': ['error', {
         allowExpressions: true,
         allowTypedFunctionExpressions: true,
@@ -212,6 +273,34 @@ export default tseslint.config(
       'no-var': 'error',
       'eqeqeq': ['error', 'always'],
       'curly': ['error', 'all']
+    }
+  },
+  {
+    // JavaScript files - disable type checking, apply general rules
+    files: ['**/*.js', '**/*.mjs', '**/*.cjs'],
+    ...tseslint.configs.disableTypeChecked,
+    rules: {
+      // General code quality (non-TypeScript)
+      'no-console': ['warn', { allow: ['warn', 'error'] }],
+      'no-debugger': 'error',
+      'no-alert': 'error',
+      'prefer-const': 'error',
+      'no-var': 'error',
+      'eqeqeq': ['error', 'always'],
+      'curly': ['error', 'all'],
+      'max-lines': ['error', { max: 400, skipBlankLines: true, skipComments: true }],
+      'max-depth': ['error', 3],
+      'max-nested-callbacks': ['error', 3],
+      'complexity': ['error', 10],
+      'max-len': ['error', {
+        code: 100,
+        tabWidth: 2,
+        ignoreUrls: true,
+        ignoreStrings: true,
+        ignoreTemplateLiterals: true,
+        ignoreRegExpLiterals: true,
+        ignoreComments: true
+      }],
     }
   },
   {
