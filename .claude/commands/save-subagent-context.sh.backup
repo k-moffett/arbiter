@@ -1,0 +1,262 @@
+#!/bin/bash
+
+# Get the directory for subagent contexts
+CONTEXT_DIR="/Users/kmoffett/code/personal/claude-context/.claude/aiContext/subAgentContexts"
+
+# Ensure directory exists
+mkdir -p "$CONTEXT_DIR"
+
+# Read the input from stdin (provided by the hook system)
+INPUT=$(cat)
+
+# Check if input is JSON metadata (contains transcript_path)
+if echo "$INPUT" | grep -q '"transcript_path"'; then
+    # Parse JSON metadata
+    SESSION_ID=$(echo "$INPUT" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4)
+    PROVIDED_TRANSCRIPT=$(echo "$INPUT" | grep -o '"transcript_path":"[^"]*"' | cut -d'"' -f4)
+    
+    # Save session mapping for future reference
+    MAPPING_FILE="$CONTEXT_DIR/.session_mapping"
+    echo "$(date '+%Y-%m-%d %H:%M:%S') | $SESSION_ID | $PROVIDED_TRANSCRIPT" >> "$MAPPING_FILE"
+    
+    TRANSCRIPT_PATH="$PROVIDED_TRANSCRIPT"
+    
+    # Debug output
+    echo "📍 Processing subagent session: $SESSION_ID" >&2
+    echo "📄 Using transcript: $(basename $TRANSCRIPT_PATH)" >&2
+    
+    # FILE MONITORING: Wait for transcript to stabilize
+    if [ -f "$TRANSCRIPT_PATH" ]; then
+        echo "⏳ Waiting for transcript to stabilize..." >&2
+        
+        # Monitor file size changes
+        LAST_SIZE=0
+        STABLE_COUNT=0
+        MAX_WAIT=10  # Maximum 10 seconds wait
+        WAIT_COUNT=0
+        
+        while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+            CURRENT_SIZE=$(stat -f%z "$TRANSCRIPT_PATH" 2>/dev/null || stat -c%s "$TRANSCRIPT_PATH" 2>/dev/null)
+            
+            if [ "$CURRENT_SIZE" = "$LAST_SIZE" ]; then
+                # File size hasn't changed
+                STABLE_COUNT=$((STABLE_COUNT + 1))
+                if [ $STABLE_COUNT -ge 3 ]; then
+                    # File has been stable for 1.5 seconds
+                    echo "✓ Transcript stable after $((WAIT_COUNT + 1)) checks" >&2
+                    break
+                fi
+            else
+                # File size changed, reset stability counter
+                STABLE_COUNT=0
+                echo "  📝 File growing: ${LAST_SIZE} → ${CURRENT_SIZE} bytes" >&2
+            fi
+            
+            LAST_SIZE=$CURRENT_SIZE
+            WAIT_COUNT=$((WAIT_COUNT + 1))
+            sleep 0.5
+        done
+        
+        if [ $WAIT_COUNT -eq $MAX_WAIT ]; then
+            echo "⚠️ Timeout waiting for transcript to stabilize" >&2
+        fi
+        
+        # Additional wait to ensure last writes are flushed
+        sleep 0.5
+    fi
+    
+    # If transcript file exists, extract the assistant's response
+    if [ -f "$TRANSCRIPT_PATH" ]; then
+        # Count current sidechains in the transcript
+        CURRENT_SIDECHAINS=$(cat "$TRANSCRIPT_PATH" | jq -r '[.isSidechain] | @csv' 2>/dev/null | \
+            awk -F',' 'BEGIN{prev="false"; count=0} 
+            {
+                gsub(/"/, "", $1)
+                if(prev == "false" && $1 == "true") count++
+                prev=$1
+            } END {print count}')
+        
+        echo "📊 Found $CURRENT_SIDECHAINS total sidechain(s) in transcript" >&2
+        
+        # Check if we've already processed some sidechains
+        PROCESSING_LOG="$CONTEXT_DIR/.processing_log"
+        LAST_PROCESSED=0
+        if [ -f "$PROCESSING_LOG" ]; then
+            # Use cut to get the last field to avoid arithmetic issues with UUIDs
+            LAST_PROCESSED=$(grep "$SESSION_ID" "$PROCESSING_LOG" 2>/dev/null | tail -1 | cut -d'|' -f3 || echo "0")
+        fi
+        
+        NEW_SIDECHAINS=$((CURRENT_SIDECHAINS - LAST_PROCESSED))
+        echo "📈 $NEW_SIDECHAINS new sidechain(s) to process (previously processed: $LAST_PROCESSED)" >&2
+        
+        if [ $NEW_SIDECHAINS -gt 0 ]; then
+            # Update processing log
+            echo "$(date '+%Y-%m-%d %H:%M:%S')|$SESSION_ID|$CURRENT_SIDECHAINS" >> "$PROCESSING_LOG"
+            
+            # Method 1: IMPROVED - Find and process only new sidechains
+            # Find the last line that has isSidechain:true
+            LAST_SIDECHAIN_LINE=$(grep -n '"isSidechain":true' "$TRANSCRIPT_PATH" | tail -1 | cut -d: -f1)
+        
+        if [ -n "$LAST_SIDECHAIN_LINE" ]; then
+            # Now find where this sidechain starts by looking for transitions
+            # We need to find the last false->true transition before or at LAST_SIDECHAIN_LINE
+            
+            # Get all transitions in the file with line numbers
+            TRANSITIONS=$(cat "$TRANSCRIPT_PATH" | jq -r '[.isSidechain] | @csv' 2>/dev/null | \
+                nl | awk -F'[,\t]' 'BEGIN{prev="false"} 
+                {
+                    gsub(/"/, "", $2)
+                    gsub(/[ \t]/, "", $1)
+                    if(prev == "false" && $2 == "true") print $1
+                    prev=$2
+                }')
+            
+            # Find the last transition that occurs before or at our LAST_SIDECHAIN_LINE
+            SIDECHAIN_START=""
+            for line in $TRANSITIONS; do
+                if [ "$line" -le "$LAST_SIDECHAIN_LINE" ]; then
+                    SIDECHAIN_START=$line
+                fi
+            done
+            
+            if [ -n "$SIDECHAIN_START" ]; then
+                echo "📊 Extracting sidechain from line $SIDECHAIN_START (last transition at/before line $LAST_SIDECHAIN_LINE)" >&2
+                
+                # Extract only messages from this last complete sidechain
+                SUBAGENT_OUTPUT=$(tail -n +"$SIDECHAIN_START" "$TRANSCRIPT_PATH" | \
+                    jq -r 'select(.isSidechain == true and .message.role == "assistant" and .message.content[0].type == "text") | .message.content[0].text' 2>/dev/null | \
+                    sed '/^$/d')
+            else
+                # No clear boundary found, extract from the beginning of file
+                echo "⚠️ No clear sidechain boundary found, extracting all sidechain messages" >&2
+                SUBAGENT_OUTPUT=$(cat "$TRANSCRIPT_PATH" | \
+                    jq -r 'select(.isSidechain == true and .message.role == "assistant" and .message.content[0].type == "text") | .message.content[0].text' 2>/dev/null | \
+                    sed '/^$/d')
+            fi
+        else
+            # No sidechain messages at all
+            echo "⚠️ No sidechain messages found in transcript" >&2
+            SUBAGENT_OUTPUT=""
+        fi
+        
+        # Method 2: If jq failed or no sidechain messages, try simpler extraction
+        if [ -z "$SUBAGENT_OUTPUT" ]; then
+            SUBAGENT_OUTPUT=$(grep '"isSidechain":true' "$TRANSCRIPT_PATH" | \
+                grep '"role":"assistant"' | \
+                jq -r '.message.content[]? | select(.type=="text") | .text' 2>/dev/null | \
+                sed '/^$/d')
+        fi
+        
+        # Method 3: Fallback to messages after last user message
+        if [ -z "$SUBAGENT_OUTPUT" ]; then
+            LAST_USER_LINE=$(grep -n '"role":"user"' "$TRANSCRIPT_PATH" | tail -1 | cut -d: -f1)
+            if [ -n "$LAST_USER_LINE" ]; then
+                SUBAGENT_OUTPUT=$(tail -n +"$((LAST_USER_LINE + 1))" "$TRANSCRIPT_PATH" | \
+                    grep '"role":"assistant"' | \
+                    jq -r '.message.content[]? | select(.type=="text") | .text' 2>/dev/null | \
+                    sed '/^$/d')
+            fi
+        fi
+        
+        # If still no output, use the raw transcript
+        if [ -z "$SUBAGENT_OUTPUT" ]; then
+            SUBAGENT_OUTPUT=$(cat "$TRANSCRIPT_PATH")
+        fi
+        
+        else
+            echo "ℹ️ No new sidechains to process" >&2
+            SUBAGENT_OUTPUT=""
+        fi  # End of NEW_SIDECHAINS check
+    else
+        # Transcript file doesn't exist, save the metadata for debugging
+        SUBAGENT_OUTPUT="[Transcript file not found: $TRANSCRIPT_PATH]\n\nMetadata:\n$INPUT"
+    fi
+else
+    # Not JSON metadata, use the input directly
+    SUBAGENT_OUTPUT="$INPUT"
+fi
+
+# Only process if we have output to save
+if [ -n "$SUBAGENT_OUTPUT" ]; then
+    # Extract task description from the first argument or from the output
+    TASK_DESC="${1:-}"
+    if [ -z "$TASK_DESC" ]; then
+    # Try multiple extraction strategies to get a meaningful description
+    
+    # 1. Look for a main header (# Title)
+    TASK_DESC=$(echo "$SUBAGENT_OUTPUT" | grep -m 1 "^# " | sed 's/^# //' | sed 's/[^a-zA-Z0-9 -]//g')
+    
+    # 2. If no main header, look for summary/overview/analysis patterns
+    if [ -z "$TASK_DESC" ]; then
+        TASK_DESC=$(echo "$SUBAGENT_OUTPUT" | grep -i -m 1 "summary\|overview\|analysis of\|research.*:" | sed 's/.*[Ss]ummary[: ]*//i' | sed 's/.*[Oo]verview[: ]*//i' | sed 's/.*[Aa]nalysis of[: ]*//i' | sed 's/[^a-zA-Z0-9 -]//g' | cut -c1-60)
+    fi
+    
+    # 3. Look for specific topic indicators
+    if [ -z "$TASK_DESC" ]; then
+        TASK_DESC=$(echo "$SUBAGENT_OUTPUT" | grep -i -m 1 "context management\|hook\|subagent\|architecture\|implementation\|configuration" | sed 's/[^a-zA-Z0-9 -]//g' | cut -c1-60)
+    fi
+    
+    # 4. Try to get the first substantial line (>20 chars) that's not a greeting
+    if [ -z "$TASK_DESC" ]; then
+        TASK_DESC=$(echo "$SUBAGENT_OUTPUT" | grep -v "^I'll\|^Let me\|^I've\|^Here" | awk 'length > 20 {print; exit}' | sed 's/[^a-zA-Z0-9 -]//g' | cut -c1-60)
+    fi
+    
+    # 5. Default fallback
+    TASK_DESC="${TASK_DESC:-research-task}"
+fi
+
+# Create a safe filename from task description
+SAFE_TASK=$(echo "$TASK_DESC" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | sed 's/^-//;s/-$//' | cut -c1-50)
+
+# Generate filename for the context
+TIMESTAMP=$(date "+%Y-%m-%d_%H:%M:%S")
+FILENAME="$CONTEXT_DIR/${TIMESTAMP}_${SAFE_TASK}.md"
+
+# Check for existing files with similar topic
+EXISTING_FILES=$(ls -1 "$CONTEXT_DIR" 2>/dev/null | grep -i "$SAFE_TASK" | head -5)
+
+# Process and save the subagent output directly
+cat > "$FILENAME" << EOF
+# Subagent Context: $TASK_DESC
+
+**Generated**: $TIMESTAMP
+
+## Task Description
+$TASK_DESC
+
+## Subagent Output
+
+$SUBAGENT_OUTPUT
+
+EOF
+
+# If there are existing similar files, append a reference section
+if [ -n "$EXISTING_FILES" ]; then
+    cat >> "$FILENAME" << EOF
+
+## Related Previous Research
+$(echo "$EXISTING_FILES" | sed 's/^/- /')
+EOF
+fi
+
+# Append metadata
+cat >> "$FILENAME" << EOF
+
+---
+*Auto-saved by subagent-stop hook at $(date)*
+EOF
+
+# Provide feedback
+echo "✅ Subagent context saved to: $FILENAME" >&2
+
+if [ -n "$EXISTING_FILES" ]; then
+    echo "📚 Found related research files:" >&2
+    echo "$EXISTING_FILES" | sed 's/^/   - /' >&2
+fi
+
+else
+    echo "ℹ️ No content to save (possibly already processed)" >&2
+fi  # End of SUBAGENT_OUTPUT check
+
+# Exit successfully
+exit 0

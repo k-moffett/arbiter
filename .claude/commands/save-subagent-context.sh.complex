@@ -1,0 +1,428 @@
+#!/bin/bash
+
+# HOOK DEBUGGING: Log all script invocations
+DEBUG_LOG="/tmp/claude-subagent-hook-debug.log"
+echo "$(date '+%Y-%m-%d %H:%M:%S'): SubagentStop hook script started (PID: $$)" >> "$DEBUG_LOG"
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Navigate to project root (two levels up from .claude/commands/)
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Get the directory for subagent contexts (relative to project root)
+CONTEXT_DIR="$PROJECT_ROOT/.claude/aiContext/subAgentContexts"
+
+# Ensure directory exists
+mkdir -p "$CONTEXT_DIR"
+
+# Read the input from stdin (provided by the hook system)
+INPUT=$(cat)
+
+# HOOK DEBUGGING: Log received input
+echo "$(date '+%Y-%m-%d %H:%M:%S'): Input length: ${#INPUT} chars" >> "$DEBUG_LOG"
+if [ ${#INPUT} -lt 500 ]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S'): Input content: $INPUT" >> "$DEBUG_LOG"
+else
+    echo "$(date '+%Y-%m-%d %H:%M:%S'): Input preview: $(echo "$INPUT" | head -c 200)..." >> "$DEBUG_LOG"
+fi
+
+# Check if input is JSON metadata (contains transcript_path)
+if echo "$INPUT" | grep -q '"transcript_path"'; then
+    # Parse JSON metadata
+    SESSION_ID=$(echo "$INPUT" | grep -o '"session_id":"[^"]*"' | cut -d'"' -f4)
+    PROVIDED_TRANSCRIPT=$(echo "$INPUT" | grep -o '"transcript_path":"[^"]*"' | cut -d'"' -f4)
+    
+    TRANSCRIPT_PATH="$PROVIDED_TRANSCRIPT"
+    MAPPING_FILE="$CONTEXT_DIR/.session_mapping"
+    
+    # Debug output
+    echo "📍 Processing subagent session: $SESSION_ID" >&2
+    echo "📄 Using transcript: $(basename $TRANSCRIPT_PATH)" >&2
+    echo "🐛 Hook triggered: SubagentStop for session $SESSION_ID" >&2
+    
+    # FILE MONITORING: Wait for transcript to stabilize
+    if [ -f "$TRANSCRIPT_PATH" ]; then
+        echo "⏳ Waiting for transcript to stabilize..." >&2
+        
+        # Monitor file size changes
+        LAST_SIZE=0
+        STABLE_COUNT=0
+        MAX_WAIT=10  # Maximum 10 seconds wait
+        WAIT_COUNT=0
+        
+        while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+            CURRENT_SIZE=$(stat -f%z "$TRANSCRIPT_PATH" 2>/dev/null || stat -c%s "$TRANSCRIPT_PATH" 2>/dev/null)
+            
+            if [ "$CURRENT_SIZE" = "$LAST_SIZE" ]; then
+                # File size hasn't changed
+                STABLE_COUNT=$((STABLE_COUNT + 1))
+                if [ $STABLE_COUNT -ge 3 ]; then
+                    # File has been stable for 1.5 seconds
+                    echo "✓ Transcript stable after $((WAIT_COUNT + 1)) checks" >&2
+                    break
+                fi
+            else
+                # File size changed, reset stability counter
+                STABLE_COUNT=0
+                echo "  📝 File growing: ${LAST_SIZE} → ${CURRENT_SIZE} bytes" >&2
+            fi
+            
+            LAST_SIZE=$CURRENT_SIZE
+            WAIT_COUNT=$((WAIT_COUNT + 1))
+            sleep 0.5
+        done
+        
+        if [ $WAIT_COUNT -eq $MAX_WAIT ]; then
+            echo "⚠️ Timeout waiting for transcript to stabilize" >&2
+        fi
+        
+        # Additional wait to ensure last writes are flushed
+        sleep 0.5
+    fi
+    
+    # If transcript file exists, extract the assistant's response
+    if [ -f "$TRANSCRIPT_PATH" ]; then
+        # Check if session has already been processed (but don't exit early)
+        ALREADY_PROCESSED="false"
+        if grep -q "$SESSION_ID" "$MAPPING_FILE" 2>/dev/null; then
+            ALREADY_PROCESSED="true"
+            echo "ℹ️ Session $SESSION_ID already in mapping, checking for new content" >&2
+        else
+            # Session is new, add to mapping file
+            echo "$(date '+%Y-%m-%d %H:%M:%S') | $SESSION_ID | $PROVIDED_TRANSCRIPT" >> "$MAPPING_FILE"
+            echo "✅ Added session $SESSION_ID to mapping file" >&2
+        fi
+        # STEP 1: Extract all Task invocations with their line numbers
+        echo "🔍 Finding Task invocations..." >&2
+        TASK_INVOCATIONS=$(cat "$TRANSCRIPT_PATH" | jq -c '
+            select(.message.content) | 
+            select(.message.content | type == "array") |
+            select(.message.content[] | select(.type == "tool_use" and .name == "Task")) | 
+            {
+                line: input_line_number,
+                uuid,
+                task: (.message.content[] | select(.type == "tool_use" and .name == "Task") | {
+                    description: .input.description,
+                    prompt: .input.prompt,
+                    subagent_type: .input.subagent_type
+                })
+            }' 2>/dev/null)
+        
+        TASK_COUNT=$(echo "$TASK_INVOCATIONS" | grep -c "^{" || echo "0")
+        echo "📋 Found $TASK_COUNT Task invocation(s)" >&2
+        
+        # STEP 2: Find all sidechain boundaries
+        echo "🔍 Finding sidechain boundaries..." >&2
+        SIDECHAIN_BOUNDARIES=$(cat "$TRANSCRIPT_PATH" | jq -r '[.isSidechain] | @csv' 2>/dev/null | \
+            nl | awk -F'[,\t]' 'BEGIN{prev="false"; count=0} 
+            {
+                gsub(/"/, "", $2)
+                gsub(/[ \t]/, "", $1)
+                if(prev == "false" && $2 == "true") {
+                    count++
+                    print count "|" $1
+                }
+                prev=$2
+            }')
+        
+        SIDECHAIN_COUNT=$(echo "$SIDECHAIN_BOUNDARIES" | grep -c "|" || echo "0")
+        echo "📊 Found $SIDECHAIN_COUNT sidechain(s)" >&2
+        
+        # Check if we've already processed some sidechains
+        PROCESSING_LOG="$CONTEXT_DIR/.processing_log"
+        LAST_PROCESSED=0
+        if [ -f "$PROCESSING_LOG" ]; then
+            LAST_PROCESSED=$(grep "$SESSION_ID" "$PROCESSING_LOG" 2>/dev/null | tail -1 | cut -d'|' -f3 || echo "0")
+        fi
+        
+        NEW_SIDECHAINS=$((SIDECHAIN_COUNT - LAST_PROCESSED))
+        echo "📈 $NEW_SIDECHAINS new sidechain(s) to process (previously processed: $LAST_PROCESSED)" >&2
+        
+        # Process new sidechains (even if session was already processed, in case there are new ones)
+        if [ $NEW_SIDECHAINS -gt 0 ]; then
+            # STEP 3: Process each new sidechain
+            PROCESSED_COUNT=0
+            
+            # Create arrays to store Task info
+            declare -a TASK_LINES
+            declare -a TASK_DESCRIPTIONS
+            declare -a TASK_PROMPTS
+            declare -a TASK_UUIDS
+            declare -a TASK_MATCHED  # Track which Tasks have been matched
+            
+            # Parse Task invocations into arrays
+            if [ -n "$TASK_INVOCATIONS" ]; then
+                i=0
+                echo "📋 Task invocations found:" >&2
+                while IFS= read -r task_json; do
+                    [ -z "$task_json" ] && continue
+                    TASK_LINES[$i]=$(echo "$task_json" | jq -r '.line')
+                    TASK_DESCRIPTIONS[$i]=$(echo "$task_json" | jq -r '.task.description // "unknown-task"')
+                    TASK_PROMPTS[$i]=$(echo "$task_json" | jq -r '.task.prompt // ""')
+                    TASK_UUIDS[$i]=$(echo "$task_json" | jq -r '.uuid // ""')
+                    TASK_MATCHED[$i]=false  # Initialize as unmatched
+                    echo "  Task $i: '${TASK_DESCRIPTIONS[$i]}' (line ${TASK_LINES[$i]})" >&2
+                    i=$((i + 1))
+                done <<< "$TASK_INVOCATIONS"
+            fi
+            
+            # Process each sidechain
+            while IFS='|' read -r SIDECHAIN_NUM START_LINE; do
+                [ -z "$SIDECHAIN_NUM" ] && continue
+                
+                # Skip already processed sidechains
+                if [ $SIDECHAIN_NUM -le $LAST_PROCESSED ]; then
+                    continue
+                fi
+                
+                echo "📖 Processing sidechain #$SIDECHAIN_NUM starting at line $START_LINE" >&2
+                
+                # Find corresponding Task using sequential matching
+                TASK_DESC="unknown-task"
+                TASK_PROMPT=""
+                TASK_UUID=""
+                MATCHED_INDEX=-1
+                
+                # Sequential matching: Find the next unmatched Task that occurred before this sidechain
+                for ((j=0; j<${#TASK_LINES[@]}; j++)); do
+                    TASK_LINE="${TASK_LINES[$j]}"
+                    # Task must be before sidechain start and not already matched
+                    if [ "$TASK_LINE" -lt "$START_LINE" ] && [ "${TASK_MATCHED[$j]}" = "false" ]; then
+                        # Found the next available Task
+                        TASK_DESC="${TASK_DESCRIPTIONS[$j]}"
+                        TASK_PROMPT="${TASK_PROMPTS[$j]}"
+                        TASK_UUID="${TASK_UUIDS[$j]}"
+                        TASK_MATCHED[$j]=true  # Mark as matched
+                        MATCHED_INDEX=$j
+                        echo "  ↳ Matched to Task $j: '$TASK_DESC' (line $TASK_LINE)" >&2
+                        break
+                    fi
+                done
+                
+                if [ $MATCHED_INDEX -eq -1 ]; then
+                    echo "  ⚠️ No matching Task found for sidechain #$SIDECHAIN_NUM" >&2
+                fi
+                
+                # Find the end of this sidechain
+                NEXT_LINE=$(echo "$SIDECHAIN_BOUNDARIES" | grep "^$((SIDECHAIN_NUM + 1))|" | cut -d'|' -f2)
+                
+                # Extract content from this sidechain
+                if [ -n "$NEXT_LINE" ]; then
+                    END_LINE=$((NEXT_LINE - 1))
+                    # Extract only text content from assistant messages
+                    SUBAGENT_OUTPUT=$(sed -n "${START_LINE},${END_LINE}p" "$TRANSCRIPT_PATH" | \
+                        jq -r '
+                        select(.isSidechain == true and 
+                               .type == "assistant" and 
+                               .message.content != null) |
+                        .message.content |
+                        if type == "array" then
+                            .[] | select(.type == "text") | .text
+                        elif type == "string" then
+                            .
+                        else
+                            empty
+                        end' 2>/dev/null | sed '/^$/d')
+                else
+                    # This is the last sidechain, extract to end of file
+                    SUBAGENT_OUTPUT=$(tail -n +"$START_LINE" "$TRANSCRIPT_PATH" | \
+                        jq -r '
+                        select(.isSidechain == true and 
+                               .type == "assistant" and 
+                               .message.content != null) |
+                        .message.content |
+                        if type == "array" then
+                            .[] | select(.type == "text") | .text
+                        elif type == "string" then
+                            .
+                        else
+                            empty
+                        end' 2>/dev/null | sed '/^$/d')
+                fi
+                
+                # Only save if we have output
+                if [ -n "$SUBAGENT_OUTPUT" ]; then
+                    # CONTENT VERIFICATION: Check if the content matches the matched Task
+                    # This handles cases where parallel Tasks execute out of order
+                    if [ $MATCHED_INDEX -ge 0 ]; then
+                        # Extract distinctive terms from Task description (avoid common words)
+                        TASK_TERMS=$(echo "$TASK_DESC" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9 ]/ /g')
+                        
+                        # Get distinctive keywords only (avoid common words, but allow short tech names)
+                        DISTINCTIVE_TERMS=""
+                        for term in $TASK_TERMS; do
+                            # Allow short terms that are likely tech names (go, js, py, vue, etc.) or longer non-common terms  
+                            if ([ ${#term} -le 3 ] && echo "go js py vue css sql api" | grep -q "$term") || \
+                               ([ ${#term} -gt 3 ] && ! echo "research latest features new major focus provide summary version release update" | grep -q "$term"); then
+                                DISTINCTIVE_TERMS="$DISTINCTIVE_TERMS $term"
+                            fi
+                        done
+                        
+                        echo "  🔍 Task terms: [$TASK_TERMS]" >&2
+                        echo "  🔍 Distinctive terms: [$DISTINCTIVE_TERMS]" >&2
+                        
+                        # Check if content contains the distinctive terms from the Task
+                        CONTENT_LOWER=$(echo "$SUBAGENT_OUTPUT" | head -20 | tr '[:upper:]' '[:lower:]')
+                        MATCH_COUNT=0
+                        REQUIRED_MATCHES=1
+                        
+                        for term in $DISTINCTIVE_TERMS; do
+                            if echo "$CONTENT_LOWER" | grep -q "$term"; then
+                                MATCH_COUNT=$((MATCH_COUNT + 1))
+                            fi
+                        done
+                        
+                        CONTENT_MATCH=$([ $MATCH_COUNT -ge $REQUIRED_MATCHES ] && echo "true" || echo "false")
+                        echo "  🔍 Content verification: '$TASK_DESC' terms=[$DISTINCTIVE_TERMS] matches=$MATCH_COUNT/$REQUIRED_MATCHES result=$CONTENT_MATCH" >&2
+                        echo "  📄 Content sample: $(echo "$CONTENT_LOWER" | head -2 | tr '\n' ' ' | cut -c1-100)..." >&2
+                        
+                        # If content doesn't match, try to find a better match among unmatched Tasks
+                        if [ "$CONTENT_MATCH" = "false" ]; then
+                            echo "  ⚠️ Content verification failed for '$TASK_DESC', searching for better match..." >&2
+                            
+                            # Reset the current match
+                            TASK_MATCHED[$MATCHED_INDEX]=false
+                            BEST_MATCH_INDEX=-1
+                            BEST_MATCH_SCORE=0
+                            
+                            # Search all unmatched Tasks for better content match
+                            for ((k=0; k<${#TASK_DESCRIPTIONS[@]}; k++)); do
+                                if [ "${TASK_MATCHED[$k]}" = "false" ]; then
+                                    CANDIDATE_TERMS_RAW=$(echo "${TASK_DESCRIPTIONS[$k]}" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9 ]/ /g')
+                                    
+                                    # Get distinctive terms for this candidate
+                                    CANDIDATE_DISTINCTIVE=""
+                                    for cterm in $CANDIDATE_TERMS_RAW; do
+                                        # Allow short terms that are likely tech names or longer non-common terms
+                                        if ([ ${#cterm} -le 3 ] && echo "go js py vue css sql api" | grep -q "$cterm") || \
+                                           ([ ${#cterm} -gt 3 ] && ! echo "research latest features new major focus provide summary version release update" | grep -q "$cterm"); then
+                                            CANDIDATE_DISTINCTIVE="$CANDIDATE_DISTINCTIVE $cterm"
+                                        fi
+                                    done
+                                    
+                                    MATCH_SCORE=0
+                                    for term in $CANDIDATE_DISTINCTIVE; do
+                                        if echo "$CONTENT_LOWER" | grep -q "$term"; then
+                                            MATCH_SCORE=$((MATCH_SCORE + 1))
+                                        fi
+                                    done
+                                    
+                                    echo "    Candidate $k: '${TASK_DESCRIPTIONS[$k]}' terms=[$CANDIDATE_DISTINCTIVE] score=$MATCH_SCORE" >&2
+                                    
+                                    if [ $MATCH_SCORE -gt $BEST_MATCH_SCORE ]; then
+                                        BEST_MATCH_SCORE=$MATCH_SCORE
+                                        BEST_MATCH_INDEX=$k
+                                    fi
+                                fi
+                            done
+                            
+                            # Apply the better match if found
+                            if [ $BEST_MATCH_INDEX -ge 0 ] && [ $BEST_MATCH_SCORE -gt 0 ]; then
+                                TASK_DESC="${TASK_DESCRIPTIONS[$BEST_MATCH_INDEX]}"
+                                TASK_PROMPT="${TASK_PROMPTS[$BEST_MATCH_INDEX]}"
+                                TASK_UUID="${TASK_UUIDS[$BEST_MATCH_INDEX]}"
+                                TASK_MATCHED[$BEST_MATCH_INDEX]=true
+                                echo "  ✓ Better match found: '$TASK_DESC' (score: $BEST_MATCH_SCORE)" >&2
+                            else
+                                # Restore original match if no better one found
+                                TASK_MATCHED[$MATCHED_INDEX]=true
+                                echo "  ✓ Keeping original match: '$TASK_DESC'" >&2
+                            fi
+                        else
+                            echo "  ✓ Content verification passed for '$TASK_DESC'" >&2
+                        fi
+                    fi
+                    
+                    # Create a safe filename from task description (AFTER content verification)
+                    SAFE_TASK=$(echo "$TASK_DESC" | tr '[:upper:]' '[:lower:]' | \
+                                sed 's/[^a-z0-9-]/-/g' | sed 's/--*/-/g' | \
+                                sed 's/^-//;s/-$//' | cut -c1-50)
+                    
+                    # Generate filename for the context
+                    TIMESTAMP=$(date "+%Y-%m-%d_%H:%M:%S")
+                    FILENAME="$CONTEXT_DIR/${TIMESTAMP}_${SAFE_TASK}_sc${SIDECHAIN_NUM}.md"
+                    
+                    # Save the subagent output with enhanced metadata
+                    cat > "$FILENAME" << EOF
+# Subagent Context: $TASK_DESC
+
+**Generated**: $TIMESTAMP
+**Sidechain**: #$SIDECHAIN_NUM
+**Task UUID**: $TASK_UUID
+**Session ID**: $SESSION_ID
+
+## Original Task Prompt
+$TASK_PROMPT
+
+## Subagent Output
+
+$SUBAGENT_OUTPUT
+
+---
+*Auto-saved by subagent-stop hook at $(date)*
+*Transcript: $(basename $TRANSCRIPT_PATH)*
+EOF
+                    
+                    echo "✅ Saved sidechain #$SIDECHAIN_NUM to: $(basename $FILENAME)" >&2
+                    PROCESSED_COUNT=$((PROCESSED_COUNT + 1))
+                else
+                    echo "⚠️ No text content found in sidechain #$SIDECHAIN_NUM" >&2
+                fi
+            done <<< "$SIDECHAIN_BOUNDARIES"
+            
+            # Update processing log with the new count
+            if [ $PROCESSED_COUNT -gt 0 ]; then
+                echo "$(date '+%Y-%m-%d %H:%M:%S')|$SESSION_ID|$SIDECHAIN_COUNT" >> "$PROCESSING_LOG"
+                echo "✨ Successfully processed $PROCESSED_COUNT new sidechain(s)" >&2
+            else
+                echo "⚠️ No content extracted from new sidechains" >&2
+            fi
+            
+        else
+            echo "ℹ️ No new sidechains to process" >&2
+        fi
+    else
+        # Transcript file doesn't exist, save error for debugging
+        TIMESTAMP=$(date "+%Y-%m-%d_%H:%M:%S")
+        ERROR_FILE="$CONTEXT_DIR/${TIMESTAMP}_error.md"
+        cat > "$ERROR_FILE" << EOF
+# Error: Transcript Not Found
+
+**Generated**: $TIMESTAMP
+**Session**: $SESSION_ID
+**Expected Path**: $TRANSCRIPT_PATH
+
+## Metadata Received
+\`\`\`json
+$INPUT
+\`\`\`
+
+---
+*Auto-saved by subagent-stop hook at $(date)*
+EOF
+        echo "⚠️ Transcript not found, saved error details to: $(basename $ERROR_FILE)" >&2
+    fi
+else
+    # Not JSON metadata, save raw input for debugging
+    TIMESTAMP=$(date "+%Y-%m-%d_%H:%M:%S")
+    RAW_FILE="$CONTEXT_DIR/${TIMESTAMP}_raw-input.md"
+    cat > "$RAW_FILE" << EOF
+# Raw Input Received
+
+**Generated**: $TIMESTAMP
+
+## Content
+$INPUT
+
+---
+*Auto-saved by subagent-stop hook at $(date)*
+EOF
+    echo "ℹ️ Received non-JSON input, saved to: $(basename $RAW_FILE)" >&2
+fi
+
+# HOOK DEBUGGING: Log completion
+echo "$(date '+%Y-%m-%d %H:%M:%S'): SubagentStop hook script completed successfully" >> "$DEBUG_LOG"
+
+# Exit successfully
+exit 0

@@ -1,0 +1,90 @@
+{
+  "name": "arbiter",
+  "version": "1.0.0",
+  "description": "Domain-agnostic knowledge hub with Discord bot, AI agent, and vector search capabilities",
+  "type": "module",
+  "private": true,
+  "author": "Arbiter Team",
+  "license": "MIT",
+  "keywords": [
+    "discord",
+    "bot",
+    "mcp",
+    "ai",
+    "agent",
+    "vector-search",
+    "knowledge-base",
+    "typescript",
+    "domain-agnostic"
+  ],
+  "scripts": {
+    "// Development": "=== Development Scripts ===",
+    "dev": "tsx watch src/index.ts",
+    "dev:docker": "docker compose up --build",
+    "dev:stop": "docker compose down",
+    "dev:logs": "docker compose logs -f",
+
+    "// Build & Production": "=== Build & Production ===",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean",
+
+    "// Testing": "=== Testing ===",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest --testPathPattern=unit",
+    "test:integration": "jest --config jest.integration.config.js",
+
+    "// Code Quality": "=== Code Quality ===",
+    "lint": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "validate": "npm run typecheck && npm run lint && npm run test",
+
+    "// Vector Database": "=== Vector Database Management ===",
+    "vector:start": "docker compose -f docker-compose.vector.yml up -d",
+    "vector:stop": "docker compose -f docker-compose.vector.yml down",
+    "vector:reset": "docker compose -f docker-compose.vector.yml down -v",
+    "vector:logs": "docker compose -f docker-compose.vector.yml logs -f"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.62.0",
+    "@modelcontextprotocol/sdk": "^1.17.5",
+    "@qdrant/js-client-rest": "^1.15.1",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "dotenv-expand": "^11.0.0",
+    "fast-xml-parser": "^4.5.3",
+    "pino": "^8.16.0",
+    "pino-pretty": "^10.2.3",
+    "uuid": "^13.0.0",
+    "zod": "^3.25.76",
+    "zod-to-json-schema": "^3.24.6"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@jest/globals": "^29.7.0",
+    "@types/jest": "^29.5.14",
+    "@types/node": "^22.10.2",
+    "@types/uuid": "^11.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-perfectionist": "^4.0.0",
+    "jest": "^29.7.0",
+    "prettier": "^3.4.2",
+    "ts-jest": "^29.2.5",
+    "tsx": "^4.0.0",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.0.0"
+  },
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  }
+}

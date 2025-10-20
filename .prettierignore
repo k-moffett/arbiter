@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+build/
+coverage/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+
+# Git
+.git/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+
+# Environment files
+.env*
+!.env.example
+
+# Generated files
+*.min.js
+*.min.css
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test snapshots
+__snapshots__/
+
+# Documentation
+*.md
+!README.md
+!docs/*.md
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
