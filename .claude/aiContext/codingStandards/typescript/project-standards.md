@@ -47,15 +47,96 @@ src/{module}/{ClassName}/
     ├── types.ts                      # Type aliases (optional)
     ├── interfaces.ts                 # Interfaces (optional)
     ├── zodSchemas.ts                 # Zod schemas (optional)
+    ├── mappers.ts                    # DTO mappers (optional)
     └── utils.ts                      # Pure functions (optional)
 ```
 
 **Key Principles:**
 - ✅ Each class gets its own directory
-- ✅ Separate concerns: constants, enums, types, interfaces, schemas, implementation
+- ✅ Separate concerns: constants, enums, types, interfaces, schemas, mappers, implementation
 - ✅ Small, focused files (<150 lines each)
 - ✅ Only create optional files when needed
 - ✅ Tests mirror src structure in `test/unit/`
+
+**mappers.ts Usage:**
+- Use when wrapping external SDKs/APIs with different naming conventions
+- Maps external types (e.g., snake_case) to internal types (camelCase)
+- Provides clean boundary between external dependencies and internal code
+- Ensures type safety and maintainability
+
+### DTO Mapper Pattern File Naming
+
+When implementing DTO mappers to wrap external SDKs/APIs, follow this naming convention:
+
+```
+src/{module}/{ClassName}/
+    ├── {domain}Types.ts     # External API types (e.g., vllmTypes.ts, ollamaTypes.ts)
+    ├── interfaces.ts        # Internal interfaces (after mapping, camelCase)
+    ├── mappers.ts          # DTO conversion functions
+    └── utils.ts            # Pure utility functions (no types/interfaces)
+```
+
+**File Responsibilities:**
+
+1. **`{domain}Types.ts`** - External API types
+   - Contains types matching the external API exactly
+   - Uses external naming conventions (e.g., snake_case)
+   - File-level `/* eslint-disable @typescript-eslint/naming-convention */`
+   - Examples: `vllmTypes.ts`, `ollamaTypes.ts`, `openaiTypes.ts`
+
+2. **`interfaces.ts`** - Internal interfaces
+   - Contains internal interfaces using project conventions (camelCase)
+   - Used after DTO mapping throughout internal code
+   - May include utility interfaces (e.g., `FetchWithTimeoutParams`)
+
+3. **`mappers.ts`** - DTO mappers
+   - Imports from both `{domain}Types.ts` AND `interfaces.ts`
+   - Contains conversion functions: `toExternal*()`, `fromExternal*()`
+   - May use targeted eslint-disable for snake_case object construction
+
+4. **`utils.ts`** - Pure utility functions ONLY
+   - Contains only pure functions
+   - NO types, NO interfaces (extract to `interfaces.ts`)
+   - Imports types/interfaces from `interfaces.ts` as needed
+
+**Example: VLLMProvider**
+```typescript
+// vllmTypes.ts - External API types
+/* eslint-disable @typescript-eslint/naming-convention */
+export interface VLLMChatRequest {
+  max_tokens?: number;
+  messages: VLLMMessage[];
+  model: string;
+}
+
+// interfaces.ts - Internal interfaces
+export interface InternalVLLMChatRequest {
+  maxTokens?: number;
+  messages: InternalVLLMMessage[];
+  model: string;
+}
+export interface FetchWithTimeoutParams {
+  controller: AbortController;
+  options: RequestInit;
+  timeout: number;
+  url: string;
+}
+
+// mappers.ts - DTO conversion
+import type { InternalVLLMChatRequest } from './interfaces';
+import type { VLLMChatRequest } from './vllmTypes';
+export function toExternalChatRequest(
+  internal: InternalVLLMChatRequest
+): VLLMChatRequest {
+  return { max_tokens: internal.maxTokens, ... };
+}
+
+// utils.ts - Pure functions only
+import type { FetchWithTimeoutParams } from './interfaces';
+export async function fetchWithTimeout<T>(
+  params: FetchWithTimeoutParams
+): Promise<T> { ... }
+```
 
 **See:** [DIRECTORY-BASED-STRUCTURE.md](./DIRECTORY-BASED-STRUCTURE.md) for complete documentation
 
@@ -313,6 +394,211 @@ const name = data?.user?.name;
 const key = 'dynamicProperty';
 const value = obj[key];
 ```
+
+## System Architecture
+
+### Multi-Service Containerized Design
+
+**Architecture Version**: 2.0 (Containerized Microservices)
+**Reference**: `.claude/aiContext/refactorPlan/architecture-overview.md`
+
+Arbiter follows a **4-layer containerized architecture** with separate services:
+
+```
+Client Layer (Discord, CLI)
+    ↓
+MCP Server Service (Port 3100)
+    ↓
+Agent Orchestrator Service (Port 3200)
+    ↓
+Data Service Layer (Port 3300)
+    ↓
+Database Services (Qdrant, Ollama, PostgreSQL)
+```
+
+### Service Structure
+
+**Project follows monorepo pattern with service separation:**
+
+```
+arbiter/
+├── src/
+│   ├── _clients/              # Client implementations
+│   │   ├── discord/           # Discord bot client
+│   │   └── cli/               # CLI tool client
+│   ├── _services/             # Backend services
+│   │   ├── mcp-server/        # MCP Server Service
+│   │   ├── agent-orchestrator/ # Agent Orchestrator Service
+│   │   └── data-service/      # Data Service Layer
+│   ├── _agents/               # Agent implementations (spawned as containers)
+│   │   ├── _orchestration/    # Orchestrator agents
+│   │   ├── _types/            # Specialized agent types
+│   │   ├── _context/          # Context engine (HyDE, decomposition)
+│   │   └── _shared/           # Shared agent utilities
+│   ├── _data/                 # Data layer abstractions
+│   │   ├── _repositories/     # Repository interfaces (DAO pattern)
+│   │   ├── _implementations/  # Database adapters
+│   │   └── _services/         # Data service wrappers
+│   └── _shared/               # Shared infrastructure
+│       ├── _base/             # Base classes
+│       └── _infrastructure/   # Infrastructure implementations
+├── docker/
+│   ├── clients/               # Client Dockerfiles
+│   ├── services/              # Service Dockerfiles
+│   └── agents/                # Agent Dockerfiles
+├── config/
+│   └── agent-llm-models.json  # LLM model configuration
+└── docker-compose.yml         # Development orchestration
+```
+
+### Service Layer Naming Conventions
+
+**Organizing Folders** (use `_lowercase`):
+- `_services/` - Backend services
+- `_clients/` - Client applications
+- `_agents/` - Agent implementations
+- `_data/` - Data layer
+- `_shared/` - Shared code
+
+**Implementation Folders** (use `PascalCase`):
+- `MCPServer/` - MCP server implementation
+- `AgentOrchestrator/` - Agent orchestrator implementation
+- `QdrantAdapter/` - Qdrant database adapter
+
+### Containerization Standards
+
+**Each service MUST**:
+- Have dedicated Dockerfile in `docker/{type}/Dockerfile.{service}`
+- Expose health check endpoint
+- Follow 12-factor app principles
+- Use environment variables for configuration
+- Run as non-root user in container
+
+**Example Service Structure**:
+```
+src/_services/mcp-server/
+├── MCPServer/
+│   ├── index.ts                    # Barrel export
+│   ├── MCPServerImplementation.ts  # Main server class
+│   ├── interfaces.ts               # Type definitions
+│   └── types.ts                    # Type aliases
+├── transports/
+│   ├── StdioTransport/
+│   └── StreamableHTTPTransport/
+├── SessionManager/
+├── RequestRouter/
+└── index.ts                        # Service entry point
+```
+
+### Transport Layer Standards
+
+**JSON-RPC 2.0** is the standard protocol for all communication:
+- Clients → MCP Server: JSON-RPC 2.0
+- MCP Server → Agent Orchestrator: JSON-RPC 2.0 or HTTP REST
+- Agents → Data Service: HTTP REST
+
+**Multi-Transport Support**:
+- **stdio**: CLI tool (single-session, local)
+- **Streamable HTTP**: Discord bot, web clients (multi-session, production)
+
+### Agent Container Standards
+
+**All agents MUST**:
+- Extend `BaseAgent` abstract class
+- Accept configuration via environment variables
+- Use LLM provider abstraction (Strategy Pattern)
+- Call Data Service APIs (never direct database access)
+- Output results to stdout (JSON format)
+- Clean up resources on exit
+
+**Agent Types**:
+1. **QueryAgent**: Main orchestration, HyDE, query decomposition
+2. **ResearchAgent**: Deep research, multi-hop reasoning
+3. **ValidationAgent**: Self-RAG validation, hallucination detection
+4. **SynthesisAgent**: Answer synthesis from multiple sources
+5. **SpecialistAgent**: Domain-specific tasks (list building, calculations)
+
+### LLM Provider Abstraction
+
+**All LLM calls MUST**:
+- Go through `LLMProvider` interface (Strategy Pattern)
+- Use configuration-driven model selection
+- Support fallback providers
+- Track token usage
+
+**Provider Support**:
+- Anthropic (Claude Sonnet 4, Opus 4, Haiku 4)
+- OpenAI (GPT-4o, GPT-4 Turbo)
+- Ollama (Llama 3 70B, Mistral - local, free)
+
+**Configuration Location**: `config/agent-llm-models.json`
+
+### Data Layer Abstraction
+
+**All database access MUST**:
+- Go through Repository Pattern (DAO)
+- Use unified interface across database types
+- Support future database swapping
+
+**Repositories**:
+- `VectorRepository` → `QdrantAdapter`, `PineconeAdapter` (future)
+- `ContextRepository` → `JSONLStore`, `MongoDBStore` (future)
+- `MetadataRepository` → `PostgreSQLStore` (future)
+
+### Inter-Service Communication
+
+**Service Dependencies** (must be injected):
+```typescript
+// MCP Server depends on Agent Orchestrator
+environment:
+  - AGENT_ORCHESTRATOR_URL=http://agent-orchestrator:3200
+
+// Agent Orchestrator depends on Data Service
+environment:
+  - DATA_SERVICE_URL=http://data-service:3300
+
+// Data Service depends on databases
+environment:
+  - QDRANT_URL=http://qdrant:6333
+  - OLLAMA_URL=http://ollama:11434
+```
+
+**Health Checks** (all services):
+```typescript
+GET /health
+Response: { status: 'ok', service: 'mcp-server', uptime: 12345 }
+```
+
+### Docker Compose Development
+
+**Start all services**:
+```bash
+docker-compose up
+```
+
+**Rebuild specific service**:
+```bash
+docker-compose build mcp-server
+docker-compose up -d mcp-server
+```
+
+**View logs**:
+```bash
+docker-compose logs -f agent-orchestrator
+```
+
+### Architecture Decision Records (ADRs)
+
+**All major architectural decisions MUST be documented** in ADRs:
+- Location: `.claude/aiContext/refactorPlan/ADR-{NNN}-{title}.md`
+- Format: Context, Decision, Consequences, Alternatives
+
+**Existing ADRs**:
+- ADR-001: Multi-transport design (stdio vs HTTP)
+- ADR-002: Dynamic agent container spawning
+- ADR-003: LLM provider abstraction
+
+---
 
 ## Architecture Patterns
 

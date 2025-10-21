@@ -1,0 +1,188 @@
+# Docker Compose - Supporting Services for Arbiter
+# Services: Qdrant (Vector DB), Ollama (Embeddings/Fallback), vLLM (Primary LLM)
+# Optimized for: RTX 4070 12GB VRAM
+
+version: '3.8'
+
+networks:
+  arbiter-network:
+    driver: bridge
+    name: arbiter-network
+
+volumes:
+  qdrant_storage:
+    name: arbiter-qdrant-storage
+  ollama_models:
+    name: arbiter-ollama-models
+  vllm_models:
+    name: arbiter-vllm-models
+
+services:
+  # ===========================================================================
+  # Qdrant Vector Database
+  # ===========================================================================
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: arbiter-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"  # REST API
+      - "6334:6334"  # gRPC API
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      # Production optimizations
+      - QDRANT__STORAGE__OPTIMIZERS__MEMMAP_THRESHOLD=20000
+      - QDRANT__STORAGE__OPTIMIZERS__INDEXING_THRESHOLD=20000
+    healthcheck:
+      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/localhost/6333 && echo -e 'GET /health HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - arbiter-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # ===========================================================================
+  # Ollama - Embeddings + Fallback LLM
+  # ===========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: arbiter-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+      - ./docker/scripts/ollama:/scripts
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+      # Allow 2 parallel requests for embedding batches
+      - OLLAMA_NUM_PARALLEL=2
+      # Can load 2 models simultaneously (embeddings + chat model)
+      - OLLAMA_MAX_LOADED_MODELS=2
+      # Enable Flash Attention for faster inference
+      - OLLAMA_FLASH_ATTENTION=1
+      # RTX 4070 is the first GPU (device 0)
+      - CUDA_VISIBLE_DEVICES=0
+    healthcheck:
+      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/localhost/11434 && echo -e 'GET /api/version HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 45s
+    networks:
+      - arbiter-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']  # RTX 4070
+              capabilities: [gpu]
+          memory: 4G
+        limits:
+          memory: 8G  # Leave headroom for vLLM
+
+  # ===========================================================================
+  # vLLM - Primary LLM Server (Phi-4 14B)
+  # ===========================================================================
+  vllm:
+    image: vllm/vllm-openai:latest
+    container_name: arbiter-vllm
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - vllm_models:/root/.cache/huggingface
+    # vLLM server configuration optimized for RTX 4070 12GB VRAM
+    command: >
+      --model microsoft/phi-4
+      --gpu-memory-utilization 0.75
+      --max-model-len 8192
+      --quantization awq
+      --dtype auto
+      --trust-remote-code
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - VLLM_WORKER_MULTIPROC_METHOD=spawn
+      - HF_HOME=/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s  # Model loading takes time on first start
+    networks:
+      - arbiter-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']  # RTX 4070
+              capabilities: [gpu]
+          memory: 8G
+        limits:
+          memory: 12G  # Use most available RAM for model loading
+
+  # ===========================================================================
+  # Ollama Model Initialization
+  # ===========================================================================
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: arbiter-ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    entrypoint: /bin/sh
+    command: >
+      -c "
+      echo 'Pulling required Ollama models...' &&
+      ollama pull nomic-embed-text &&
+      echo '✓ nomic-embed-text (embeddings) downloaded' &&
+      ollama pull llama3.1:8b &&
+      echo '✓ llama3.1:8b (validation/fallback) downloaded' &&
+      ollama pull phi4:14b-q4_K_M &&
+      echo '✓ phi4:14b-q4_K_M (fallback reasoning) downloaded' &&
+      echo 'All models initialized successfully!'
+      "
+    networks:
+      - arbiter-network
+    restart: "no"
+
+  # ===========================================================================
+  # Qdrant Web UI (Optional - for development/debugging)
+  # ===========================================================================
+  qdrant-web-ui:
+    image: qdrant/qdrant:v1.7.4
+    container_name: arbiter-qdrant-ui
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    environment:
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    networks:
+      - arbiter-network
+    profiles:
+      - ui
+      - debug
+    restart: unless-stopped

@@ -1,0 +1,88 @@
+# Multi-stage Dockerfile for Arbiter Agents
+# Based on cogitator patterns, optimized for agent-first architecture
+# Supports: Development, Builder, Production targets
+
+# =============================================================================
+# Stage 1: Development
+# =============================================================================
+FROM node:22-alpine AS development
+
+LABEL maintainer="Arbiter Agent System"
+LABEL description="Development environment for Arbiter agents"
+
+WORKDIR /app
+
+# Install system dependencies
+RUN apk add --no-cache \
+    curl \
+    bash \
+    htop \
+    git
+
+# Copy package files
+COPY package*.json ./
+
+# Install all dependencies (dev + production)
+RUN npm ci
+
+# Set Node.js memory limits for agent workloads
+ENV NODE_OPTIONS="--max-old-space-size=2048"
+
+# Default command for development (can be overridden)
+CMD ["npm", "run", "dev"]
+
+# =============================================================================
+# Stage 2: Builder
+# =============================================================================
+FROM node:22-alpine AS builder
+
+LABEL description="Build stage for TypeScript compilation"
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production
+
+# Copy source code
+COPY src/ ./src/
+COPY tsconfig.json ./
+
+# Build TypeScript to JavaScript
+RUN npm run build
+
+# =============================================================================
+# Stage 3: Production
+# =============================================================================
+FROM node:22-alpine AS production
+
+LABEL description="Production runtime for Arbiter agents"
+
+WORKDIR /app
+
+# Create non-root user for security (following cogitator pattern)
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Copy built artifacts from builder stage
+COPY --from=builder --chown=nodejs:nodejs /app/dist ./dist
+COPY --from=builder --chown=nodejs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nodejs:nodejs /app/package*.json ./
+
+# Install runtime dependencies
+RUN apk add --no-cache curl
+
+# Switch to non-root user
+USER nodejs
+
+# Health check (basic verification, can be enhanced per agent type)
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=40s \
+  CMD node -e "process.exit(0)"
+
+# Expose default agent port (can be overridden)
+EXPOSE 3000
+
+# Default production command
+CMD ["node", "dist/index.js"]

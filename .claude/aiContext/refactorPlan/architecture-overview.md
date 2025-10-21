@@ -1,6 +1,6 @@
 # Arbiter Architecture Overview
 
-**Version**: 1.0 (Foundation Design)
+**Version**: 2.0 (Containerized Multi-Service Design)
 **Last Updated**: 2025-10-20
 **Status**: Design → Implementation
 
@@ -8,1044 +8,923 @@
 
 ## Executive Summary
 
-Arbiter is a next-generation RAG (Retrieval-Augmented Generation) assistant built on modern research patterns including HyDE, Self-RAG, and intelligent tool planning. Unlike traditional RAG systems, Arbiter validates every answer, supports complex multi-hop reasoning, and provides source provenance for all claims.
+Arbiter is a next-generation **multi-agent RAG system** built on modern research patterns including HyDE, Self-RAG, and intelligent tool planning. Unlike traditional RAG systems, Arbiter uses **dynamic agent spawning**, validates every answer, supports complex multi-hop reasoning, and provides source provenance for all claims.
 
 **Key Differentiators:**
-- ✅ Self-validating answers with hallucination detection
-- ✅ Multi-hop query decomposition for complex questions
-- ✅ Intelligent tool planning with adaptive routing
-- ✅ Pluggable domain architecture (not IP-locked)
-- ✅ MCP server model for multi-client support
+- ✅ **Containerized microservices architecture** - Independently scalable services
+- ✅ **Dynamic multi-agent orchestration** - Spawn agents as Docker containers on-demand
+- ✅ **Pluggable LLM models** - Swap models per agent type (Claude, GPT-4, Llama, etc.)
+- ✅ **Multi-transport support** - stdio (CLI) and Streamable HTTP (Discord, web)
+- ✅ **Self-validating answers** with hallucination detection
+- ✅ **Multi-hop query decomposition** for complex questions
+- ✅ **Pluggable domain architecture** (not IP-locked)
+- ✅ **Multi-database abstraction** - Repository pattern for future database swaps
 
 ---
 
 ## System Architecture
 
-### High-Level View
+### High-Level Containerized View
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Client Layer                           │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │ Discord Bot  │  │  Slack Bot   │  │   CLI Tool   │     │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘     │
-│         │                  │                  │             │
-│         └─────────────────────────────────────┘             │
-└────────────────────────────┬────────────────────────────────┘
-                             │ MCP Protocol (stdio/HTTP)
-┌────────────────────────────▼────────────────────────────────┐
-│                  Arbiter MCP Server                         │
-│                                                             │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │              Query Processing Pipeline               │  │
-│  │                                                      │  │
-│  │  User Query                                          │  │
-│  │      ↓                                               │  │
-│  │  [1] Context Engine (HyDE, Decomposition)           │  │
-│  │      ↓                                               │  │
-│  │  [2] Tool Planning Engine (Smart Selection)         │  │
-│  │      ↓                                               │  │
-│  │  [3] Tool Execution (Parallel/Sequential)           │  │
-│  │      ↓                                               │  │
-│  │  [4] Answer Synthesis (LLM)                          │  │
-│  │      ↓                                               │  │
-│  │  [5] Self-RAG Validation (Verify & Grade)           │  │
-│  │      ↓                                               │  │
-│  │  Validated Answer + Sources                         │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                             │
-│  ┌──────────────────┐  ┌──────────────────┐               │
-│  │  Tool Registry   │  │  Resource Mgr    │               │
-│  │  - Vector Search │  │  - Documents     │               │
-│  │  - Ingestion     │  │  - Entities      │               │
-│  │  - Validation    │  │  - Metadata      │               │
-│  └──────────────────┘  └──────────────────┘               │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-┌────────────────────────▼────────────────────────────────┐
-│                 Data Layer                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
-│  │ Qdrant Vector│  │    Ollama    │  │   Context    │  │
-│  │   Database   │  │  Embeddings  │  │    Store     │  │
-│  └──────────────┘  └──────────────┘  └──────────────┘  │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                     CLIENT SERVICES                             │
+│                  (Separate Deployments)                         │
+│                                                                 │
+│  ┌─────────────────┐              ┌─────────────────┐          │
+│  │  Discord Bot    │              │    CLI Tool     │          │
+│  │   Container     │              │   (Local)       │          │
+│  │  Port: 8080     │              │                 │          │
+│  └────────┬────────┘              └────────┬────────┘          │
+│           │                                │                   │
+│     HTTP (JSON-RPC)                   HTTP/stdio              │
+└───────────┼────────────────────────────────┼───────────────────┘
+            │                                │
+            └────────────────┬───────────────┘
+                             │
+┌────────────────────────────▼─────────────────────────────────────┐
+│                   MCP SERVER SERVICE                             │
+│                  (Dedicated Container)                           │
+│                    Port: 3100                                    │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Transport Layer                                           │ │
+│  │  ├─ Stdio Transport (for CLI)                              │ │
+│  │  └─ Streamable HTTP Transport (for Discord/web)            │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Session Manager (multi-session, multi-user)               │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Tool Registry                                             │ │
+│  │  - vector-search  - validation  - ingestion               │ │
+│  │  - context-write  - calculation                           │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Resource Manager                                          │ │
+│  │  - documents  - entities  - context  - metadata            │ │
+│  └────────────────────────────────────────────────────────────┘ │
+└────────────────────────────┬─────────────────────────────────────┘
+                             │
+                        HTTP/gRPC calls
+                             │
+┌────────────────────────────▼─────────────────────────────────────┐
+│              AGENT ORCHESTRATOR SERVICE                          │
+│                  (Dedicated Container)                           │
+│                    Port: 3200                                    │
+│                                                                  │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Agent Spawning Engine                                     │ │
+│  │  - Docker API integration                                  │ │
+│  │  - Kubernetes orchestration (optional)                     │ │
+│  │  - Container lifecycle management                          │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  Agent Pool Manager                                        │ │
+│  │  - Active agents: Map<sessionId, Agent[]>                 │ │
+│  │  - Max concurrent: 30 agents                               │ │
+│  │  - Cleanup on session end                                  │ │
+│  └────────────────────────────────────────────────────────────┘ │
+│  ┌────────────────────────────────────────────────────────────┐ │
+│  │  LLM Provider Registry                                     │ │
+│  │  - Anthropic (Claude Sonnet/Opus)                          │ │
+│  │  - OpenAI (GPT-4/GPT-4o)                                   │ │
+│  │  - Ollama (Llama 3, Mistral, local models)                │ │
+│  │  - Strategy Pattern for swapping models per agent         │ │
+│  └────────────────────────────────────────────────────────────┘ │
+└────────────────────────────┬─────────────────────────────────────┘
+                             │
+              Spawns containers dynamically
+                             │
+            ┌────────────────┼────────────────┐
+            │                │                │
+┌───────────▼──────┐ ┌───────▼──────┐ ┌──────▼──────────┐
+│ Agent Container  │ │ Agent Container│ │ Agent Container │
+│   (QueryAgent)   │ │(ResearchAgent) │ │(ValidationAgent)│
+│                  │ │                │ │                 │
+│ LLM: Claude      │ │ LLM: GPT-4     │ │ LLM: Llama3     │
+│ Port: Dynamic    │ │ Port: Dynamic  │ │ Port: Dynamic   │
+└───────────┬──────┘ └───────┬────────┘ └──────┬──────────┘
+            │                │                  │
+            └────────────────┼──────────────────┘
+                             │
+                    HTTP calls to data service
+                             │
+┌────────────────────────────▼─────────────────────────────────────┐
+│                   DATA SERVICE LAYER                             │
+│              (Independent Container Services)                    │
+│                                                                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐          │
+│  │   Qdrant     │  │   Ollama     │  │  Context DB  │          │
+│  │   Service    │  │   Service    │  │   Service    │          │
+│  │ Port: 6333   │  │ Port: 11434  │  │ Port: 5432   │          │
+│  └──────────────┘  └──────────────┘  └──────────────┘          │
+│                                                                  │
+│  Future databases (pluggable via Repository Pattern):           │
+│  - Pinecone, Weaviate, Milvus (vector DBs)                     │
+│  - MongoDB, PostgreSQL (context/metadata stores)                │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Core Components
+## Service-Level Architecture
 
-## 1. Context Engine
+### 1. Client Services
 
-**Purpose**: Transform user queries into optimal retrieval queries using modern RAG patterns
+**Purpose**: User-facing applications that send queries to Arbiter
 
-### 1.1 HyDE (Hypothetical Document Embeddings)
+**Deployments**:
+- **Discord Bot**: Containerized Node.js service
+- **CLI Tool**: Local binary (optionally containerized)
+- **Slack Bot**: Future
+- **Web UI**: Future
 
-**What it does**: Bridges the semantic gap between questions and answers
+**Communication**:
+- Uses JSON-RPC 2.0 protocol
+- Discord/Slack/Web → HTTP (Streamable HTTP transport)
+- CLI → stdio or HTTP
 
-**Flow**:
-```
-User Query: "What weapons can a Space Marine Terminator take?"
-    ↓
-[HyDE Generator - LLM]
-    ↓
-Hypothetical Answer:
-"Space Marine Terminators can be equipped with storm bolters,
-power fists, lightning claws, thunder hammers, and storm shields.
-They have access to heavy weapons including assault cannons,
-heavy flamers, and cyclone missile launchers..."
-    ↓
-[Embed Hypothetical Answer]
-    ↓
-[Vector Search with Hypothetical Embedding]
-    ↓
-Real Documents Matching Hypothetical Answer
-```
-
-**Implementation**:
-```typescript
-interface HyDEEngine {
-  /**
-   * Generate hypothetical document from query
-   */
-  generateHypothetical(
-    query: string,
-    domain: string
-  ): Promise<string>;
-
-  /**
-   * Embed hypothetical document
-   */
-  embedHypothetical(
-    hypothetical: string
-  ): Promise<number[]>;
-
-  /**
-   * Search with hypothetical embedding
-   */
-  search(
-    embedding: number[],
-    filters?: Record<string, unknown>
-  ): Promise<SearchResult[]>;
-}
-```
-
-**Benefits**:
-- Better retrieval for vague queries
-- Bridges terminology gaps
-- Works with zero-shot queries
-
----
-
-### 1.2 Query Decomposition
-
-**What it does**: Breaks complex queries into atomic sub-queries
-
-**Query Types**:
-1. **Simple Lookup**: Direct fact retrieval
-   - "What is a Terminator's toughness?"
-   - No decomposition needed
-
-2. **Procedural**: Step-by-step processes
-   - "How do I build a 2000 point army?"
-   - Decompose into: constraints → unit selection → validation
-
-3. **Comparative**: Comparing multiple entities
-   - "Which is better, a Dreadnought or a Land Raider?"
-   - Decompose into: unit A stats → unit B stats → comparison
-
-4. **Multi-Hop**: Requires reasoning across sources
-   - "Can my Space Wolves Terminators with storm shields fight in turn 1?"
-   - Decompose into: unit rules → faction rules → universal rules → synthesis
-
-5. **List-Building**: Constructive queries
-   - "Make me a 2000 point competitive Necron list"
-   - Decompose into: detachment → constraints → unit selection → validation
-
-**Implementation**:
-```typescript
-interface QueryDecomposer {
-  /**
-   * Classify query type
-   */
-  classify(query: string): QueryType;
-
-  /**
-   * Decompose into sub-queries
-   */
-  decompose(query: string): Promise<DecomposedQuery>;
-}
-
-interface DecomposedQuery {
-  originalQuery: string;
-  queryType: QueryType;
-  subQueries: SubQuery[];
-  executionPlan: ExecutionPlan;  // Parallel or sequential
-  synthesisRequired: boolean;
-  synthesisPrompt?: string;
-}
-
-interface SubQuery {
-  query: string;
-  suggestedTool: string;
-  dependencies: string[];  // IDs of sub-queries this depends on
-  priority: number;
-}
-```
-
-**Execution Strategies**:
-- **Parallel**: Independent sub-queries execute concurrently
-- **Sequential**: Dependent sub-queries execute in order
-- **Hybrid**: Mix of parallel batches in sequence
-
----
-
-### 1.3 Step-Back Prompting
-
-**What it does**: Asks high-level questions first for better context
-
-**Example**:
-```
-Original Query: "Can Terminators deep strike on turn 1?"
-    ↓
-Step-Back Question: "What are the universal deep strike rules in this game?"
-    ↓
-[Retrieve general rules first]
-    ↓
-[Then answer specific question with context]
-```
-
-**Implementation**:
-```typescript
-interface StepBackEngine {
-  /**
-   * Generate step-back question
-   */
-  generateStepBack(query: string): Promise<string>;
-
-  /**
-   * Execute step-back query first
-   */
-  executeWithStepBack(
-    query: string
-  ): Promise<{
-    stepBackAnswer: string;
-    mainAnswer: string;
-  }>;
+**Example Discord Bot Request**:
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "agent/query",
+  "params": {
+    "sessionId": "discord-ch-123456",
+    "query": "Build me a competitive 2000pt Space Marine list",
+    "context": {
+      "channelId": "123456",
+      "userId": "789012",
+      "guildId": "345678"
+    }
+  },
+  "id": "req-001"
 }
 ```
 
 ---
 
-### 1.4 Context Memory Manager
+### 2. MCP Server Service
 
-**Purpose**: Long-term conversation memory and learning
+**Purpose**: Protocol layer for tools, resources, and prompts. Acts as API gateway between clients and agents.
 
-**Features**:
-- Session-based context (scoped to conversation)
-- Long-term memory (persisted across sessions)
-- Temporal relevance scoring
-- Reference resolution
-- Topic tracking
+**Container Spec**:
+- Image: `arbiter-mcp-server:latest`
+- Port: 3100 (HTTP), stdio (CLI)
+- Environment:
+  - `AGENT_ORCHESTRATOR_URL=http://agent-orchestrator:3200`
+  - `MCP_TRANSPORT=http,stdio`
+  - `MAX_SESSIONS=1000`
 
-**Storage**:
+**Responsibilities**:
+- ✅ Accept JSON-RPC requests from clients
+- ✅ Manage sessions (multi-user, multi-channel)
+- ✅ Route requests to Agent Orchestrator
+- ✅ Expose MCP tools (vector-search, validation, ingestion, etc.)
+- ✅ Expose MCP resources (documents, entities, context)
+- ✅ Expose MCP prompts (domain-specific templates)
+- ❌ NO agent logic, NO query planning, NO LLM calls
+
+**API Endpoints**:
+```
+POST /jsonrpc       - JSON-RPC requests (Streamable HTTP)
+GET /health         - Health check
+GET /sessions       - Active sessions
+DELETE /sessions/:id - Cleanup session
+```
+
+**Session Management**:
 ```typescript
-interface ContextStore {
-  // Short-term (session)
-  saveMessage(
-    sessionId: string,
-    message: Message
-  ): Promise<void>;
-
-  getRecentMessages(
-    sessionId: string,
-    limit: number
-  ): Promise<Message[]>;
-
-  // Long-term (persistent)
-  saveInsight(
-    insight: Insight
-  ): Promise<void>;
-
-  recallSimilar(
-    query: string,
-    limit: number
-  ): Promise<Insight[]>;
-}
-
-interface Message {
-  id: string;
-  role: 'user' | 'assistant';
-  content: string;
-  timestamp: Date;
+interface Session {
+  id: string;                    // "discord-ch-123456"
+  clientType: 'cli' | 'discord' | 'slack';
+  createdAt: Date;
+  lastAccessedAt: Date;
   metadata: {
-    tools_used?: string[];
-    confidence?: number;
-    validated?: boolean;
+    channelId?: string;
+    userId?: string;
+    guildId?: string;
   };
-}
-
-interface Insight {
-  id: string;
-  summary: string;
-  context: string;
-  timestamp: Date;
-  usageCount: number;
-  lastAccessed: Date;
-  relevanceScore: number;
+  activeRequests: Map<string, RequestState>;
 }
 ```
 
 ---
 
-## 2. Tool Planning Engine
+### 3. Agent Orchestrator Service
 
-**Purpose**: Intelligently select and orchestrate tool execution
+**Purpose**: Spawn, manage, and coordinate agent containers dynamically
 
-### 2.1 Tool Selection
+**Container Spec**:
+- Image: `arbiter-agent-orchestrator:latest`
+- Port: 3200
+- Volumes:
+  - `/var/run/docker.sock` (for Docker API access)
+- Environment:
+  - `MAX_AGENTS_PER_SESSION=10`
+  - `MAX_TOTAL_AGENTS=30`
+  - `DOCKER_NETWORK=arbiter-network`
+  - `DATA_SERVICE_URL=http://data-service:3300`
+  - `DEFAULT_LLM_PROVIDER=anthropic`
+  - `ANTHROPIC_API_KEY=xxx`
+  - `OPENAI_API_KEY=xxx`
+  - `OLLAMA_URL=http://ollama:11434`
 
-**How it works**: LLM-powered tool routing with chain-of-thought reasoning
+**Responsibilities**:
+- ✅ Receive query requests from MCP Server
+- ✅ Analyze query complexity (simple vs complex vs list-building)
+- ✅ Spawn appropriate number of agent containers
+- ✅ Assign LLM models to agents based on task type
+- ✅ Coordinate agent execution (parallel vs sequential)
+- ✅ Consolidate agent results
+- ✅ Cleanup containers on completion or timeout
+- ✅ Return final response to MCP Server
 
-**Flow**:
-```
-Query + Available Tools
-    ↓
-[LLM Tool Planner]
-    ↓
-Tool Selection Reasoning:
-"This is a comparative query requiring stats for two units.
-I need:
-1. vector-search for Unit A
-2. vector-search for Unit B
-3. No external tools needed
-4. Synthesis required to compare"
-    ↓
-Tool Chain Plan:
-- Step 1: vector-search (Unit A) [PARALLEL]
-- Step 2: vector-search (Unit B) [PARALLEL]
-- Step 3: synthesize-comparison [SEQUENTIAL after 1,2]
-```
-
-**Implementation**:
+**Agent Spawning Logic**:
 ```typescript
-interface ToolPlanner {
+interface AgentSpawningStrategy {
   /**
-   * Plan tool execution for query
+   * Determine how many agents to spawn and their types
    */
-  plan(
-    query: string,
-    decomposition: DecomposedQuery,
-    availableTools: ToolInfo[]
-  ): Promise<ToolPlan>;
+  plan(query: string, decomposition: DecomposedQuery): AgentSpawnPlan;
 }
 
-interface ToolPlan {
-  steps: ToolStep[];
-  reasoning: string;
+interface AgentSpawnPlan {
+  agents: AgentSpec[];
+  executionMode: 'sequential' | 'parallel' | 'hybrid';
   estimatedDuration: number;
 }
 
-interface ToolStep {
-  tool: string;
-  parameters: Record<string, unknown>;
-  dependencies: string[];  // Step IDs this depends on
-  executionMode: 'parallel' | 'sequential';
-  fallback?: {
-    tool: string;
-    condition: 'on_error' | 'on_low_confidence';
+interface AgentSpec {
+  type: 'query' | 'research' | 'validation' | 'synthesis' | 'specialist';
+  llmProvider: 'anthropic' | 'openai' | 'ollama';
+  llmModel: string; // "claude-sonnet-4", "gpt-4o", "llama3:70b"
+  containerImage: string; // "arbiter-query-agent:latest"
+  resources: {
+    cpu: string;    // "0.5"
+    memory: string; // "512Mi"
   };
+  dependencies: string[]; // IDs of agents this depends on
 }
 ```
 
-**Tool Categories**:
-1. **Vector Search Tools**
-   - Semantic search
-   - Keyword search
-   - Hybrid search (RRF)
-
-2. **Validation Tools**
-   - Fact checking
-   - Hallucination detection
-   - Confidence scoring
-
-3. **Synthesis Tools**
-   - Comparison synthesis
-   - Multi-source synthesis
-   - Summary generation
-
-4. **External Tools**
-   - Web search
-   - API calls
-   - Document retrieval
-
----
-
-### 2.2 Tool Execution Orchestrator
-
-**Handles**:
-- Parallel execution for independent tools
-- Sequential execution with context passing
-- Retry logic with exponential backoff
-- Timeout handling
-- Result caching
-
-**Implementation**:
+**Example Spawn Plan** (Complex Query):
 ```typescript
-interface ToolOrchestrator {
-  /**
-   * Execute tool plan
-   */
-  execute(plan: ToolPlan): Promise<ToolExecutionResult[]>;
-
-  /**
-   * Execute single step with retry
-   */
-  executeStep(
-    step: ToolStep,
-    context: ExecutionContext
-  ): Promise<ToolResult>;
-}
-
-interface ExecutionContext {
-  previousResults: Map<string, ToolResult>;
-  conversationHistory: Message[];
-  metadata: Record<string, unknown>;
-}
-
-interface ToolResult {
-  tool: string;
-  success: boolean;
-  data: unknown;
-  confidence: number;
-  duration: number;
-  sources?: Source[];
-  error?: string;
-}
-```
-
----
-
-## 3. Self-RAG Validation Layer
-
-**Purpose**: Validate every answer before returning to user
-
-### 3.1 Validation Pipeline
-
-**Flow**:
-```
-Generated Answer + Source Documents
-    ↓
-[Validation Step 1: Relevance Check]
-Question: Are retrieved documents relevant to the query?
-Output: ISREL token (relevant | irrelevant)
-    ↓ (if irrelevant, retrieve more)
-[Validation Step 2: Support Check]
-Question: Is the answer supported by the documents?
-Output: ISSUP token (fully_supported | partially_supported | no_support)
-    ↓ (if no_support, regenerate or reject)
-[Validation Step 3: Usefulness Check]
-Question: Does the answer address the user's question?
-Output: ISUSE token (useful | not_useful)
-    ↓ (if not_useful, regenerate with better prompt)
-[Validation Step 4: Confidence Scoring]
-Compute final confidence: 0.0 - 1.0
-    ↓
-[Decision Gate]
-If confidence >= threshold (0.7):
-    Return answer
-Else:
-    - Try alternative retrieval strategy
-    - Or return "I don't have enough information"
-```
-
-**Implementation**:
-```typescript
-interface SelfRAGValidator {
-  /**
-   * Validate generated answer
-   */
-  validate(
-    query: string,
-    answer: string,
-    sources: Source[]
-  ): Promise<ValidationResult>;
-}
-
-interface ValidationResult {
-  isRelevant: boolean;
-  isSupported: boolean;
-  isUseful: boolean;
-  confidence: number;
-  reasoning: string;
-  citations: Citation[];
-  issues: ValidationIssue[];
-}
-
-enum ValidationType {
-  RELEVANCE = 'relevance',
-  SUPPORT = 'support',
-  USEFULNESS = 'usefulness',
-  HALLUCINATION = 'hallucination',
-  COMPLETENESS = 'completeness'
-}
-
-interface ValidationIssue {
-  type: ValidationType;
-  severity: 'error' | 'warning' | 'info';
-  message: string;
-  suggestion?: string;
-}
-```
-
----
-
-### 3.2 Hallucination Detection
-
-**Techniques**:
-
-1. **Claim Extraction**
-   - Extract factual claims from answer
-   - Each claim becomes a verification target
-
-2. **Source Verification**
-   - For each claim, find supporting source
-   - If no source found → hallucination
-
-3. **Semantic Similarity**
-   - Compute similarity between claim and source
-   - Low similarity → potential hallucination
-
-4. **Consistency Check**
-   - Check for internal contradictions
-   - Cross-reference multiple sources
-
-**Implementation**:
-```typescript
-interface HallucinationDetector {
-  /**
-   * Extract claims from answer
-   */
-  extractClaims(answer: string): Promise<Claim[]>;
-
-  /**
-   * Verify each claim against sources
-   */
-  verifyClaim(
-    claim: Claim,
-    sources: Source[]
-  ): Promise<VerificationResult>;
-
-  /**
-   * Detect hallucinations
-   */
-  detect(
-    answer: string,
-    sources: Source[]
-  ): Promise<HallucinationReport>;
-}
-
-interface Claim {
-  text: string;
-  type: 'fact' | 'opinion' | 'inference';
-  confidence: number;
-}
-
-interface VerificationResult {
-  claim: Claim;
-  isSupported: boolean;
-  supportingSources: Source[];
-  similarityScore: number;
-}
-
-interface HallucinationReport {
-  hasHallucinations: boolean;
-  hallucinations: Claim[];
-  confidence: number;
-  recommendation: 'accept' | 'regenerate' | 'reject';
-}
-```
-
----
-
-### 3.3 Provenance Tracking
-
-**What it does**: Tracks exactly where each piece of information came from
-
-**Features**:
-- Citation for every claim
-- Source document metadata
-- Chunk-level references
-- Vector search scores
-
-**Implementation**:
-```typescript
-interface Citation {
-  claim: string;
-  sources: Source[];
-  confidence: number;
-}
-
-interface Source {
-  id: string;
-  document: string;
-  chunkId: string;
-  content: string;
-  metadata: {
-    title?: string;
-    page?: number;
-    section?: string;
-    url?: string;
-  };
-  score: number;  // Vector search score
-}
-```
-
----
-
-## 4. MCP Server Architecture
-
-**Purpose**: Expose Arbiter as a pluggable MCP server
-
-### 4.1 Server Structure
-
-```
-arbiter-mcp-server/
-├── src/
-│   ├── server.ts                    # MCP server entry point
-│   ├── resources/
-│   │   ├── DocumentResource.ts      # Expose documents as MCP resources
-│   │   ├── EntityResource.ts        # Expose entities (units, concepts)
-│   │   └── ContextResource.ts       # Expose conversation context
-│   ├── tools/
-│   │   ├── VectorSearchTool.ts      # MCP tool: vector search
-│   │   ├── ValidationTool.ts        # MCP tool: validate answer
-│   │   ├── IngestionTool.ts         # MCP tool: ingest documents
-│   │   └── QueryTool.ts             # MCP tool: full query pipeline
-│   ├── prompts/
-│   │   └── DomainPrompts.ts         # MCP prompts for domain
-│   └── engine/
-│       ├── ContextEngine.ts         # HyDE, decomposition, etc.
-│       ├── ToolPlanner.ts           # Tool planning
-│       ├── Validator.ts             # Self-RAG validation
-│       └── Orchestrator.ts          # Execution orchestration
-└── domains/
-    ├── warhammer-40k/
-    │   ├── config.json              # Domain configuration
-    │   ├── sources.json             # PDF/repo URLs
-    │   ├── tools/                   # Domain-specific tools
-    │   └── prompts/                 # Domain-specific prompts
-    └── generic/
-        └── config.json              # Generic domain template
-```
-
----
-
-### 4.2 MCP Protocol Integration
-
-**Resources** (read-only data):
-```typescript
-// Client can list all documents
-mcp.resources.list("documents")
-
-// Client can read specific document
-mcp.resources.read("document://warhammer-40k/units/space-marines/terminator")
-
-// Client can search entities
-mcp.resources.list("entities", { query: "terminator" })
-```
-
-**Tools** (executable functions):
-```typescript
-// Client calls vector search tool
-mcp.tools.call("vector-search", {
-  query: "terminator weapons",
-  collection: "warhammer-40k_units",
-  limit: 5
-})
-
-// Client calls full query pipeline
-mcp.tools.call("query", {
-  query: "Build me a 2000 point Space Marine list",
-  validate: true,
-  includeProvenance: true
-})
-```
-
-**Prompts** (reusable prompt templates):
-```typescript
-// Client gets domain-specific prompt
-mcp.prompts.get("warhammer-40k/unit-comparison")
-
-// Returns template with variables
-{
-  name: "unit-comparison",
-  arguments: ["unit1", "unit2"],
-  template: "Compare {unit1} and {unit2} in terms of..."
-}
-```
-
----
-
-### 4.3 Domain Configuration
-
-**config.json**:
-```json
-{
-  "domain": "warhammer-40k",
-  "version": "10.0",
-  "description": "Warhammer 40,000 10th Edition rules and units",
-
-  "vectorDatabase": {
-    "collections": [
-      "warhammer-40k_units",
-      "warhammer-40k_rules",
-      "warhammer-40k_lore"
-    ],
-    "embeddingModel": "nomic-embed-text",
-    "dimensions": 768
-  },
-
-  "entities": {
-    "types": ["unit", "weapon", "ability", "stratagem", "faction"],
-    "schema": "./schemas/entity.json"
-  },
-
-  "tools": {
-    "custom": [
-      "FactionValidationTool",
-      "PointsCalculatorTool",
-      "ListBuilderTool"
-    ]
-  },
-
-  "ingestion": {
-    "sources": "./sources.json",
-    "parsers": {
-      "battlescribe": true,
-      "pdf": true,
-      "web": false
+// Query: "Compare Dreadnought vs Land Raider in competitive play"
+const plan = {
+  agents: [
+    {
+      type: 'query',
+      llmProvider: 'anthropic',
+      llmModel: 'claude-sonnet-4',
+      containerImage: 'arbiter-query-agent:latest',
+      resources: { cpu: '1', memory: '1Gi' },
+      dependencies: []
+    },
+    {
+      type: 'research',
+      llmProvider: 'openai',
+      llmModel: 'gpt-4o',
+      containerImage: 'arbiter-research-agent:latest',
+      resources: { cpu: '0.5', memory: '512Mi' },
+      dependencies: ['query-1'] // Waits for query agent
+    },
+    {
+      type: 'research',
+      llmProvider: 'openai',
+      llmModel: 'gpt-4o',
+      containerImage: 'arbiter-research-agent:latest',
+      resources: { cpu: '0.5', memory: '512Mi' },
+      dependencies: ['query-1']
+    },
+    {
+      type: 'synthesis',
+      llmProvider: 'anthropic',
+      llmModel: 'claude-sonnet-4',
+      containerImage: 'arbiter-synthesis-agent:latest',
+      resources: { cpu: '1', memory: '1Gi' },
+      dependencies: ['research-1', 'research-2']
+    },
+    {
+      type: 'validation',
+      llmProvider: 'ollama',
+      llmModel: 'llama3:70b',
+      containerImage: 'arbiter-validation-agent:latest',
+      resources: { cpu: '0.5', memory: '512Mi' },
+      dependencies: ['synthesis-1']
     }
+  ],
+  executionMode: 'hybrid', // parallel research, then sequential synthesis/validation
+  estimatedDuration: 8000 // 8 seconds
+};
+```
+
+**Docker Container Spawning**:
+```typescript
+class DockerAgentSpawner {
+  async spawnAgent(spec: AgentSpec): Promise<Container> {
+    return await this.dockerClient.createContainer({
+      Image: spec.containerImage,
+      Env: [
+        `AGENT_TYPE=${spec.type}`,
+        `LLM_PROVIDER=${spec.llmProvider}`,
+        `LLM_MODEL=${spec.llmModel}`,
+        `DATA_SERVICE_URL=${process.env.DATA_SERVICE_URL}`,
+        `ANTHROPIC_API_KEY=${process.env.ANTHROPIC_API_KEY}`,
+        `OPENAI_API_KEY=${process.env.OPENAI_API_KEY}`,
+        `OLLAMA_URL=${process.env.OLLAMA_URL}`
+      ],
+      HostConfig: {
+        NetworkMode: 'arbiter-network',
+        Memory: this.parseMemory(spec.resources.memory),
+        NanoCpus: this.parseCpu(spec.resources.cpu),
+        AutoRemove: true // Cleanup after exit
+      }
+    });
   }
 }
 ```
 
-**sources.json**:
-```json
+---
+
+### 4. Agent Containers (Dynamically Spawned)
+
+**Purpose**: Execute specific parts of query processing pipeline
+
+**Base Container Spec**:
+- Base Image: `arbiter-agent-base:latest`
+- Specialized Images: `arbiter-query-agent`, `arbiter-research-agent`, etc.
+- Port: Dynamically assigned
+- Lifecycle: Ephemeral (created, executed, destroyed)
+
+**Agent Types**:
+
+#### 4.1 QueryAgent (Main Orchestrator)
+**LLM**: Claude Sonnet 4 (default) or configurable
+**Role**: Main query processing, HyDE generation, query decomposition
+**Spawned**: Always (1 per query)
+
+#### 4.2 ResearchAgent (Parallel Research)
+**LLM**: GPT-4o (default) or configurable
+**Role**: Deep research, multi-hop reasoning, document retrieval
+**Spawned**: 2-5 for complex queries, 0 for simple lookups
+
+#### 4.3 ValidationAgent (Self-RAG)
+**LLM**: Llama 3 70B (local, cost-effective) or configurable
+**Role**: Relevance check, support check, hallucination detection
+**Spawned**: 1 per query (final validation)
+
+#### 4.4 SynthesisAgent (Answer Generation)
+**LLM**: Claude Sonnet 4 (default) or configurable
+**Role**: Combine research results, generate coherent answer
+**Spawned**: 1 for complex queries requiring synthesis
+
+#### 4.5 SpecialistAgent (Domain-Specific)
+**LLM**: Configurable per domain
+**Role**: List building, points calculation, faction validation
+**Spawned**: 1-10 for specialized tasks (e.g., army list building)
+
+**Agent Container Lifecycle**:
+```
+1. Orchestrator receives query
+2. Decompose query, create spawn plan
+3. Create Docker containers with appropriate LLM configs
+4. Start containers
+5. Agents execute tasks (call Data Service APIs)
+6. Agents return results to Orchestrator
+7. Orchestrator consolidates results
+8. Containers automatically removed (AutoRemove: true)
+```
+
+---
+
+### 5. LLM Provider Abstraction
+
+**Purpose**: Allow swapping LLM models per agent without code changes
+
+**Strategy Pattern Implementation**:
+
+```typescript
+// Abstract LLM provider interface
+interface LLMProvider {
+  name: 'anthropic' | 'openai' | 'ollama';
+
+  /**
+   * Generate completion
+   */
+  complete(params: {
+    model: string;
+    prompt: string;
+    systemPrompt?: string;
+    temperature?: number;
+    maxTokens?: number;
+  }): Promise<LLMResponse>;
+
+  /**
+   * Generate embedding
+   */
+  embed(params: {
+    model: string;
+    text: string;
+  }): Promise<number[]>;
+}
+
+// Concrete implementations
+class AnthropicProvider implements LLMProvider {
+  name = 'anthropic' as const;
+
+  async complete(params) {
+    const response = await this.client.messages.create({
+      model: params.model, // "claude-sonnet-4"
+      max_tokens: params.maxTokens ?? 4096,
+      temperature: params.temperature ?? 0.7,
+      system: params.systemPrompt,
+      messages: [{ role: 'user', content: params.prompt }]
+    });
+    return { text: response.content[0].text };
+  }
+}
+
+class OpenAIProvider implements LLMProvider {
+  name = 'openai' as const;
+
+  async complete(params) {
+    const response = await this.client.chat.completions.create({
+      model: params.model, // "gpt-4o"
+      max_tokens: params.maxTokens ?? 4096,
+      temperature: params.temperature ?? 0.7,
+      messages: [
+        { role: 'system', content: params.systemPrompt },
+        { role: 'user', content: params.prompt }
+      ]
+    });
+    return { text: response.choices[0].message.content };
+  }
+}
+
+class OllamaProvider implements LLMProvider {
+  name = 'ollama' as const;
+
+  async complete(params) {
+    const response = await fetch(`${this.baseURL}/api/generate`, {
+      method: 'POST',
+      body: JSON.stringify({
+        model: params.model, // "llama3:70b"
+        prompt: params.prompt,
+        system: params.systemPrompt,
+        options: {
+          temperature: params.temperature ?? 0.7,
+          num_predict: params.maxTokens ?? 4096
+        }
+      })
+    });
+    return { text: response.response };
+  }
+}
+
+// Provider Registry (DI Container)
+class LLMProviderRegistry {
+  private providers = new Map<string, LLMProvider>();
+
+  register(provider: LLMProvider): void {
+    this.providers.set(provider.name, provider);
+  }
+
+  get(name: string): LLMProvider {
+    const provider = this.providers.get(name);
+    if (!provider) {
+      throw new Error(`LLM provider '${name}' not registered`);
+    }
+    return provider;
+  }
+}
+
+// Agent uses provider via DI
+class BaseAgent {
+  constructor(
+    private llmProvider: LLMProvider,
+    private llmModel: string
+  ) {}
+
+  protected async generateCompletion(prompt: string): Promise<string> {
+    const response = await this.llmProvider.complete({
+      model: this.llmModel,
+      prompt
+    });
+    return response.text;
+  }
+}
+```
+
+**Configuration (Per Agent Type)**:
+
+```typescript
+// Config file: config/agent-llm-models.json
 {
-  "battlescribe": {
-    "repos": [
+  "agentTypes": {
+    "query": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4",
+      "fallback": {
+        "provider": "openai",
+        "model": "gpt-4o"
+      }
+    },
+    "research": {
+      "provider": "openai",
+      "model": "gpt-4o",
+      "fallback": {
+        "provider": "ollama",
+        "model": "llama3:70b"
+      }
+    },
+    "validation": {
+      "provider": "ollama",
+      "model": "llama3:70b",
+      "fallback": {
+        "provider": "anthropic",
+        "model": "claude-haiku-4"
+      }
+    },
+    "synthesis": {
+      "provider": "anthropic",
+      "model": "claude-sonnet-4",
+      "fallback": {
+        "provider": "openai",
+        "model": "gpt-4o"
+      }
+    },
+    "specialist": {
+      "provider": "anthropic",
+      "model": "claude-opus-4",
+      "fallback": {
+        "provider": "openai",
+        "model": "gpt-4o"
+      }
+    }
+  },
+  "costOptimization": {
+    "enabled": true,
+    "useLocalFirst": true,
+    "rules": [
       {
-        "url": "https://github.com/BSData/wh40k-10e",
-        "branch": "main",
-        "catalogPath": "Warhammer 40,000.gst"
+        "condition": "queryComplexity < 0.3",
+        "provider": "ollama",
+        "model": "llama3:70b"
+      },
+      {
+        "condition": "queryComplexity >= 0.7",
+        "provider": "anthropic",
+        "model": "claude-opus-4"
       }
     ]
-  },
-
-  "pdfs": [
-    {
-      "name": "Core Rules 10th Edition",
-      "url": "https://example.com/core-rules.pdf",
-      "type": "rules"
-    },
-    {
-      "name": "Munitorum Field Manual Q4 2024",
-      "url": "https://example.com/munitorum.pdf",
-      "type": "points"
-    }
-  ]
+  }
 }
 ```
 
----
-
-## 5. Query Processing Flow
-
-### End-to-End Example
-
-**User Query**: "Build me a competitive 2000 point Space Marine list with lots of firepower"
-
-**Step 1: Context Engine**
-```
-[HyDE Generator]
-Hypothetical list:
-"A competitive Space Marine list focused on firepower at 2000 points
-includes units like Eradicators, Hellblasters, Ballistus Dreadnoughts..."
-
-[Query Decomposition]
-Type: list-building
-Sub-queries:
-1. "What detachments are competitive for Space Marines?"
-2. "What units have high firepower output?"
-3. "What is the points cost for Eradicators, Hellblasters, etc.?"
-4. "What are the detachment constraints?"
-
-Execution plan: Sequential (constraints → selection → validation)
-```
-
-**Step 2: Tool Planning**
-```
-[Tool Planner]
-Tools needed:
-1. vector-search for competitive detachments
-2. vector-search for high-firepower units
-3. points-lookup for selected units
-4. faction-validation to check constraints
-
-Plan:
-- Step 1: vector-search (detachments) → get top 3
-- Step 2: vector-search (units, filtered by firepower)
-- Step 3-5: PARALLEL points-lookup for each unit
-- Step 6: faction-validation on final list
-```
-
-**Step 3: Tool Execution**
-```
-[Orchestrator]
-Execute step 1: vector-search
-→ Results: "Gladius Task Force", "Ironstorm Spearhead", "Vanguard Spearhead"
-
-Execute step 2: vector-search
-→ Results: Eradicators (high anti-tank), Hellblasters (high anti-infantry), etc.
-
-Execute step 3-5: PARALLEL points-lookup
-→ Eradicators: 95pts, Hellblasters: 140pts, etc.
-
-Build list with constraints...
-
-Execute step 6: faction-validation
-→ Valid: true, warnings: ["Consider more anti-air"]
-```
-
-**Step 4: Answer Synthesis**
-```
-[LLM Synthesis]
-Generated answer:
-"Here's a competitive 2000-point Space Marine list focused on firepower using
-the Ironstorm Spearhead detachment:
-
-**HQ**
-- Captain in Terminator Armour (95pts)
-
-**Battleline**
-- 10x Hellblasters (140pts)
-- 10x Hellblasters (140pts)
-
-**Infantry**
-- 6x Eradicators (95pts)
-- 6x Eradicators (95pts)
-..."
-```
-
-**Step 5: Self-RAG Validation**
-```
-[Validator]
-Relevance check: ✅ Retrieved units match "firepower" requirement
-Support check: ✅ All units exist in database with correct points
-Usefulness check: ✅ List meets 2000pts, legal, competitive
-
-Claims extracted:
-1. "Ironstorm Spearhead is competitive" → Supported (detachment rules)
-2. "Eradicators cost 95pts" → Supported (points data)
-3. "List is 2000 points" → Supported (calculation verified)
-
-Hallucination check: ✅ No hallucinations detected
-Confidence: 0.92
-
-Citations:
-- Units: warhammer-40k_units (source: BattleScribe 10e)
-- Points: Munitorum Field Manual Q4 2024
-- Detachment: Core Rules 10th Edition
-```
-
-**Final Response**:
-```
-Here's a competitive 2000-point Space Marine list focused on firepower...
-
-[Full list details]
-
-**Sources**:
-- Unit data: BattleScribe Catalogue (Warhammer 40k 10th Edition)
-- Points costs: Munitorum Field Manual Q4 2024, pg. 12-15
-- Detachment rules: Core Rules 10th Edition, pg. 87
-
-Confidence: 92%
-```
+**Benefits**:
+- ✅ Swap models without code changes (config-driven)
+- ✅ Cost optimization (use local Ollama for simple tasks)
+- ✅ Fallback support (if primary provider fails)
+- ✅ A/B testing different models
+- ✅ Future-proof (add new providers easily)
 
 ---
 
-## 6. Data Layer
+### 6. Data Service Layer
 
-### 6.1 Vector Database (Qdrant)
+**Purpose**: Unified data access layer for all database operations
 
-**Collections**:
-- `{domain}_units` - Unit profiles, stats, weapons
-- `{domain}_rules` - Game rules, mechanics
-- `{domain}_lore` - Background, narrative content
+**Container Spec**:
+- Image: `arbiter-data-service:latest`
+- Port: 3300
+- Environment:
+  - `QDRANT_URL=http://qdrant:6333`
+  - `OLLAMA_URL=http://ollama:11434`
+  - `POSTGRES_URL=postgres://context-db:5432/arbiter`
 
-**Schema**:
-```typescript
-interface VectorDocument {
-  id: string;
-  vector: number[];  // 768-dim embedding
-  content: string;   // Original text
-  metadata: {
-    type: string;
-    domain: string;
-    source: string;
-    title?: string;
-    // Domain-specific fields
-    [key: string]: unknown;
-  };
-}
+**Responsibilities**:
+- ✅ Expose REST/gRPC API for data operations
+- ✅ Implement Repository Pattern (database abstraction)
+- ✅ Handle vector search (Qdrant)
+- ✅ Handle embeddings (Ollama)
+- ✅ Handle context storage (PostgreSQL/JSONL)
+- ✅ Connection pooling and caching
+
+**API Endpoints**:
+```
+POST /vector/search      - Semantic search
+POST /vector/upsert      - Insert/update vectors
+POST /vector/delete      - Delete vectors
+POST /embedding/generate - Generate embeddings
+POST /context/save       - Save conversation context
+GET  /context/query      - Retrieve context
 ```
 
----
-
-### 6.2 Context Store (JSONL)
-
-**Storage**: Conversation history in JSONL format
-**Retention**: Configurable (default: 30 days for sessions, indefinite for insights)
+**Databases** (Separate Containers):
+- **Qdrant** (Port 6333): Vector database
+- **Ollama** (Port 11434): Local embeddings
+- **PostgreSQL** (Port 5432): Context/metadata store
 
 ---
 
-### 6.3 Embeddings (Ollama)
-
-**Model**: nomic-embed-text
-**Dimensions**: 768
-**Performance**: ~100ms per embedding
-
----
-
-## 7. Deployment Architecture
-
-### Docker Compose
+## Docker Compose Configuration
 
 ```yaml
+version: '3.8'
+
 services:
-  arbiter-mcp-server:
-    build: ./mcp-server
+  # ============================================
+  # CLIENT SERVICES
+  # ============================================
+
+  discord-bot:
+    build: ./clients/discord
+    container_name: arbiter-discord-bot
+    environment:
+      - DISCORD_TOKEN=${DISCORD_TOKEN}
+      - MCP_SERVER_URL=http://mcp-server:3100
+    depends_on:
+      - mcp-server
+    networks:
+      - arbiter-network
+    restart: unless-stopped
+
+  # ============================================
+  # MCP SERVER SERVICE
+  # ============================================
+
+  mcp-server:
+    build: ./services/mcp-server
+    container_name: arbiter-mcp-server
     ports:
       - "3100:3100"
     environment:
-      - QDRANT_HOST=qdrant
-      - OLLAMA_HOST=ollama
+      - AGENT_ORCHESTRATOR_URL=http://agent-orchestrator:3200
+      - MCP_TRANSPORT=http
+      - MAX_SESSIONS=1000
+      - NODE_ENV=production
+    depends_on:
+      - agent-orchestrator
+    networks:
+      - arbiter-network
+    restart: unless-stopped
+
+  # ============================================
+  # AGENT ORCHESTRATOR SERVICE
+  # ============================================
+
+  agent-orchestrator:
+    build: ./services/agent-orchestrator
+    container_name: arbiter-agent-orchestrator
+    ports:
+      - "3200:3200"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - MAX_AGENTS_PER_SESSION=10
+      - MAX_TOTAL_AGENTS=30
+      - DOCKER_NETWORK=arbiter-network
+      - DATA_SERVICE_URL=http://data-service:3300
+      - DEFAULT_LLM_PROVIDER=anthropic
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OLLAMA_URL=http://ollama:11434
+      - NODE_ENV=production
+    depends_on:
+      - data-service
+    networks:
+      - arbiter-network
+    restart: unless-stopped
+
+  # ============================================
+  # DATA SERVICE LAYER
+  # ============================================
+
+  data-service:
+    build: ./services/data-service
+    container_name: arbiter-data-service
+    ports:
+      - "3300:3300"
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - OLLAMA_URL=http://ollama:11434
+      - POSTGRES_URL=postgresql://arbiter:${POSTGRES_PASSWORD}@context-db:5432/arbiter
+      - NODE_ENV=production
     depends_on:
       - qdrant
       - ollama
+      - context-db
+    networks:
+      - arbiter-network
+    restart: unless-stopped
+
+  # ============================================
+  # DATABASE SERVICES
+  # ============================================
 
   qdrant:
     image: qdrant/qdrant:v1.7.4
+    container_name: arbiter-qdrant
     ports:
       - "6333:6333"
     volumes:
       - qdrant-data:/qdrant/storage
+    networks:
+      - arbiter-network
+    restart: unless-stopped
 
   ollama:
     image: ollama/ollama:latest
+    container_name: arbiter-ollama
     ports:
       - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
+    networks:
+      - arbiter-network
+    restart: unless-stopped
+    # Pull models on startup
+    command: >
+      sh -c "ollama pull nomic-embed-text &&
+             ollama pull llama3:70b &&
+             ollama serve"
 
-  # Optional: Discord bot as example client
-  discord-bot:
-    build: ./clients/discord
+  context-db:
+    image: postgres:16-alpine
+    container_name: arbiter-context-db
+    ports:
+      - "5432:5432"
     environment:
-      - MCP_SERVER_URL=http://arbiter-mcp-server:3100
-    depends_on:
-      - arbiter-mcp-server
+      - POSTGRES_DB=arbiter
+      - POSTGRES_USER=arbiter
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    volumes:
+      - context-db-data:/var/lib/postgresql/data
+    networks:
+      - arbiter-network
+    restart: unless-stopped
+
+networks:
+  arbiter-network:
+    driver: bridge
+
+volumes:
+  qdrant-data:
+  ollama-data:
+  context-db-data:
 ```
 
 ---
 
-## 8. Technology Stack
+## Agent Container Images
 
-**Core**:
-- TypeScript 5.7
-- Node.js 22+
-- MCP SDK ^1.17.5
+### Base Agent Image
 
-**LLMs**:
-- Anthropic Claude (Sonnet) for reasoning
-- Ollama (local) for embeddings
+**Dockerfile** (`docker/agents/Dockerfile.base`):
+```dockerfile
+FROM node:22-alpine
 
-**Vector DB**:
-- Qdrant v1.7.4
+WORKDIR /app
 
-**Infrastructure**:
-- Docker & Docker Compose
-- JSONL for context storage
+# Install dependencies
+COPY package*.json ./
+RUN npm ci --production
+
+# Copy shared agent code
+COPY src/_shared ./src/_shared
+COPY src/_agents/_shared ./src/_agents/_shared
+
+# Copy agent base class
+COPY src/_agents/_types/BaseAgent ./src/_agents/_types/BaseAgent
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD node healthcheck.js || exit 1
+
+CMD ["node", "dist/agent.js"]
+```
+
+### Specialized Agent Images
+
+**QueryAgent Dockerfile**:
+```dockerfile
+FROM arbiter-agent-base:latest
+
+# Copy QueryAgent specific code
+COPY src/_agents/_types/QueryAgent ./src/_agents/_types/QueryAgent
+COPY src/_agents/_context ./src/_agents/_context
+
+ENV AGENT_TYPE=query
+CMD ["node", "dist/agents/query-agent.js"]
+```
 
 ---
 
-## 9. Performance Targets
+## Cost Optimization Strategy
+
+**LLM Model Selection by Task**:
+
+| Agent Type | Default Model | Cost/1M Tokens | Use Case |
+|------------|---------------|----------------|----------|
+| QueryAgent | Claude Sonnet 4 | $3.00 | Main orchestration, HyDE, decomposition |
+| ResearchAgent | GPT-4o | $2.50 | Deep research, multi-hop reasoning |
+| ValidationAgent | Llama 3 70B (local) | $0.00 | Self-RAG validation (runs locally) |
+| SynthesisAgent | Claude Sonnet 4 | $3.00 | Answer synthesis, comparison |
+| SpecialistAgent | Claude Opus 4 | $15.00 | Complex domain tasks (list building) |
+
+**Cost Savings**:
+- Simple queries: 1 agent (Llama 3 local) = **$0.00**
+- Medium queries: 3 agents (Sonnet + 2x GPT-4o) = **~$0.05**
+- Complex queries: 10 agents (Opus + 5x Sonnet + 4x local) = **~$0.30**
+
+**Expected savings vs single-model**: **40-60%** (per research)
+
+---
+
+## Deployment Scenarios
+
+### Development
+```bash
+docker-compose up
+```
+- All services on single machine
+- Ollama for local embeddings
+- PostgreSQL for context
+
+### Production (Single Server)
+```bash
+docker-compose -f docker-compose.prod.yml up -d
+```
+- Load balancer in front of MCP server
+- Multiple agent orchestrator replicas
+- Managed Qdrant Cloud
+- Managed PostgreSQL (RDS/Cloud SQL)
+
+### Production (Kubernetes)
+```bash
+kubectl apply -f k8s/
+```
+- Auto-scaling agent orchestrators
+- Horizontal pod autoscaling for MCP server
+- StatefulSet for databases
+- Ingress for external traffic
+
+---
+
+## Performance Targets
 
 **Response Times** (95th percentile):
-- Simple query: <3 seconds
-- Complex query: <10 seconds
-- List building: <15 seconds
-
-**Accuracy**:
-- Validation accuracy: >95%
-- Hallucination rate: <5%
-- Query success rate: >90%
+- Simple query (1 agent): <2 seconds
+- Complex query (5 agents): <8 seconds
+- List building (10+ agents): <12 seconds
 
 **Scalability**:
-- 100 concurrent users (with proper infrastructure)
-- 1M+ vectors per collection
-- 10K+ documents per domain
+- Concurrent users: 1000+ (with proper infrastructure)
+- Concurrent agents: 30 per orchestrator, N orchestrators
+- Vectors: 10M+ per collection (Qdrant)
+
+**Reliability**:
+- Service uptime: 99.9%
+- Agent spawn time: <500ms
+- LLM fallback: Automatic on provider failure
 
 ---
 
-## 10. Security & Privacy
+## Security Considerations
 
-**Data**:
-- No user data sent to external services (except Anthropic API)
-- All embeddings generated locally (Ollama)
-- Context stored locally
+**API Keys**:
+- Never in code or images
+- Passed via environment variables
+- Stored in secret management (Vault, AWS Secrets Manager)
 
-**Validation**:
-- Input sanitization
-- Output validation
-- Rate limiting
-- Error handling
+**Network Isolation**:
+- Services communicate on private `arbiter-network`
+- Only MCP server exposed publicly (port 3100)
+- Agent containers ephemeral (no persistent data)
 
----
-
-## 11. Extensibility
-
-### Adding a New Domain
-
-1. Create domain config: `domains/my-domain/config.json`
-2. Add sources: `domains/my-domain/sources.json`
-3. Run ingestion: `arbiter ingest --domain my-domain`
-4. (Optional) Add custom tools: `domains/my-domain/tools/`
-5. (Optional) Add custom prompts: `domains/my-domain/prompts/`
-
-### Adding a New Tool
-
-1. Extend `BaseMcpTool`
-2. Implement `execute()` method
-3. Register in `ToolRegistry`
-4. Add to domain config (if domain-specific)
-
-### Adding a New Client
-
-1. Install MCP SDK in your client
-2. Connect to Arbiter MCP server (stdio or HTTP)
-3. Use `mcp.tools.call()` and `mcp.resources.list()`
+**Rate Limiting**:
+- Per-session request limits
+- Max concurrent agents per session
+- LLM API rate limiting with backoff
 
 ---
 
 ## Next Steps
 
-1. Review architecture with stakeholder
-2. Begin implementation with ARB-002 (Context System)
-3. Validate with end-to-end test query
-4. Iterate based on feedback
+1. ✅ Architecture documented with containerized multi-service design
+2. ✅ LLM provider abstraction pattern defined
+3. ✅ Dynamic agent spawning strategy outlined
+4. ⏭️ Create ADR-001: Multi-transport design
+5. ⏭️ Create ADR-002: Dynamic agent container spawning
+6. ⏭️ Create ADR-003: LLM provider abstraction
+7. ⏭️ Create ADR-004: Microservices separation
+8. ⏭️ Implement base service skeletons
+9. ⏭️ Create Docker images
+10. ⏭️ Set up Docker Compose for development
 
 ---
 
 **Last Updated**: 2025-10-20
-**Status**: Ready for Implementation
+**Status**: Ready for ADR Creation & Implementation
