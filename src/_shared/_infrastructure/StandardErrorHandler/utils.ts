@@ -4,7 +4,7 @@
  * Pure utility functions for error handling operations.
  */
 
-import { DomainError } from '../../_base/BaseErrorHandler';
+import { DomainError } from '../../_base/BaseErrorHandler/index.js';
 
 /**
  * Enrich an error with additional context

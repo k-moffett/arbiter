@@ -264,6 +264,106 @@ npm run format
 npm run validate
 ```
 
+### Log Viewing and Debugging
+
+Arbiter provides comprehensive logging with built-in filtering to separate application logs from Ollama model logs.
+
+#### Quick Start
+
+```bash
+# View Arbiter application logs only
+npm run logs:arbiter
+
+# View Arbiter CLI logs
+npm run logs:arbiter:cli
+
+# View Ollama model logs
+npm run logs:ollama
+
+# View all logs from all containers
+npm run logs:all
+
+# View JSON structured logs (pipe to jq for filtering)
+npm run logs:json
+```
+
+#### Log Formats
+
+**Text Format (default):**
+```
+[ARBITER] INFO: Server started on port 3100
+[ARBITER] DEBUG: Processing request for entity: weapon-123
+[ARBITER] ERROR: Failed to connect to Qdrant
+```
+
+**JSON Format (for machine parsing):**
+```json
+{"timestamp":"2025-01-15T10:30:45.123Z","level":"INFO","service":"ARBITER","message":"Server started on port 3100"}
+{"timestamp":"2025-01-15T10:30:46.456Z","level":"DEBUG","service":"ARBITER","message":"Processing request","context":{"entityId":"weapon-123"}}
+```
+
+#### Environment Variables
+
+Configure logging behavior in `.env` or Docker environment:
+
+```bash
+# Log prefix (default: [ARBITER])
+LOG_PREFIX="[ARBITER]"
+
+# Log format: text or json (default: text)
+LOG_FORMAT="text"
+
+# Log level: DEBUG, INFO, WARN, ERROR (default: INFO)
+LOG_LEVEL="INFO"
+
+# Enable colored output (default: true)
+LOG_USE_COLORS="true"
+
+# Enable Ollama debug logs (default: false)
+OLLAMA_DEBUG="false"
+```
+
+#### Advanced Filtering
+
+**Filter JSON logs with jq:**
+```bash
+# Show only ERROR level logs
+npm run logs:json | jq 'select(.level == "ERROR")'
+
+# Show logs with specific context
+npm run logs:json | jq 'select(.context.entityId != null)'
+
+# Pretty print JSON logs
+npm run logs:json | jq '.'
+```
+
+**Direct Docker commands:**
+```bash
+# View logs from specific container
+docker logs -f arbiter-mcp-server
+
+# Filter Arbiter logs with grep
+docker logs -f arbiter-mcp-server 2>&1 | grep "\[ARBITER\]"
+
+# View last 100 lines
+docker logs --tail 100 arbiter-mcp-server
+```
+
+#### Switching Log Formats
+
+To enable JSON structured logging, update your `.env` file:
+
+```bash
+LOG_FORMAT="json"
+```
+
+Then restart the services:
+
+```bash
+npm run docker:services:down
+npm run docker:services:up
+```
+
 ---
 
 ## Project Status

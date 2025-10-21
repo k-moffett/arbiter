@@ -24,11 +24,11 @@ import type {
   GetCacheParams,
   HasCacheParams,
   SetCacheParams,
-} from '../../_base/BaseCache';
-import type { CacheEntry } from '../../_base/BaseCache';
-import type { CacheEntryInternal, MemoryCacheParams } from './interfaces';
+} from '../../_base/BaseCache/index.js';
+import type { CacheEntry } from '../../_base/BaseCache/index.js';
+import type { CacheEntryInternal, MemoryCacheParams } from './interfaces.js';
 
-import { BaseCache } from '../../_base/BaseCache';
+import { BaseCache } from '../../_base/BaseCache/index.js';
 
 /* eslint-disable @typescript-eslint/require-await -- BaseCache requires async methods, but MemoryCache is synchronous */
 export class MemoryCache extends BaseCache {

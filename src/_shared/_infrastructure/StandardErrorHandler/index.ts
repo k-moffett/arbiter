@@ -4,5 +4,5 @@
  * Exports the StandardErrorHandler implementation and related types.
  */
 
-export type { StandardErrorHandlerParams } from './interfaces';
-export { StandardErrorHandler } from './StandardErrorHandlerImplementation';
+export type { StandardErrorHandlerParams } from './interfaces.js';
+export { StandardErrorHandler } from './StandardErrorHandlerImplementation.js';

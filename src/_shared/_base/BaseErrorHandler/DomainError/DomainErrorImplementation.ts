@@ -14,7 +14,7 @@
  * ```
  */
 
-import type { DomainErrorParams } from './interfaces';
+import type { DomainErrorParams } from './interfaces.js';
 
 export class DomainError extends Error {
   public readonly code: string;

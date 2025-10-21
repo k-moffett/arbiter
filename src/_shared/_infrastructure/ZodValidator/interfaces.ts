@@ -4,7 +4,7 @@
  * Interface definitions for ZodValidator configuration and Zod structures.
  */
 
-import type { ZodValidationResult } from './types';
+import type { ZodValidationResult } from './types.js';
 
 /**
  * Zod schema interface

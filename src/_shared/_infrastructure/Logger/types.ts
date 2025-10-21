@@ -4,7 +4,7 @@
  * Type definitions for structured logging with metadata.
  */
 
-import type { LogContext } from '../../_base/BaseLogger';
+import type { LogContext } from '../../_base/BaseLogger/index.js';
 
 /**
  * Metadata included in all log messages

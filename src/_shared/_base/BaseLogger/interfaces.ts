@@ -4,8 +4,8 @@
  * Interface definitions for BaseLogger method parameters.
  */
 
-import type { LogLevel } from './enums';
-import type { LogContext } from './types';
+import type { LogLevel } from './enums.js';
+import type { LogContext } from './types.js';
 
 /**
  * Parameters for child logger creation

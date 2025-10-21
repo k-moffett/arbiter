@@ -20,8 +20,8 @@
  * ```
  */
 
-import type { DeleteCacheParams, GetCacheParams, HasCacheParams, SetCacheParams } from './interfaces';
-import type { CacheEntry } from './types';
+import type { DeleteCacheParams, GetCacheParams, HasCacheParams, SetCacheParams } from './interfaces.js';
+import type { CacheEntry } from './types.js';
 
 export abstract class BaseCache {
   /**

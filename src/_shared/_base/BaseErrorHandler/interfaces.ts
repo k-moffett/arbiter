@@ -4,7 +4,7 @@
  * Interface definitions for BaseErrorHandler method parameters.
  */
 
-import type { ValidationError } from '../BaseValidator';
+import type { ValidationError } from '../BaseValidator/index.js';
 
 /**
  * Parameters for error handling

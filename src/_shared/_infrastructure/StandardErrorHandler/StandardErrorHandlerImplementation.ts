@@ -27,12 +27,12 @@ import type {
   CreateValidationErrorParams,
   HandleErrorParams,
   IsOperationalParams,
-} from '../../_base/BaseErrorHandler';
-import type { BaseLogger } from '../../_base/BaseLogger';
-import type { StandardErrorHandlerParams } from './interfaces';
+} from '../../_base/BaseErrorHandler/index.js';
+import type { BaseLogger } from '../../_base/BaseLogger/index.js';
+import type { StandardErrorHandlerParams } from './interfaces.js';
 
-import { BaseErrorHandler, DomainError } from '../../_base/BaseErrorHandler';
-import { enrichError, normalizeError } from './utils';
+import { BaseErrorHandler, DomainError } from '../../_base/BaseErrorHandler/index.js';
+import { enrichError, normalizeError } from './utils.js';
 
  
 export class StandardErrorHandler extends BaseErrorHandler {

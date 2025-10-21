@@ -13,16 +13,16 @@
  */
 
 // Array utilities
-// export * from './_array'; // TODO: Implement array utilities
+// export * from './_array/index.js'; // TODO: Implement array utilities
 
 // Date utilities
-// export * from './_date'; // TODO: Implement date utilities
+// export * from './_date/index.js'; // TODO: Implement date utilities
 
 // Object utilities
-// export * from './_object'; // TODO: Implement object utilities
+// export * from './_object/index.js'; // TODO: Implement object utilities
 
 // String utilities
-// export * from './_string'; // TODO: Implement string utilities
+// export * from './_string/index.js'; // TODO: Implement string utilities
 
 // Validation utilities
-// export * from './_validation'; // TODO: Implement validation utilities
+// export * from './_validation/index.js'; // TODO: Implement validation utilities

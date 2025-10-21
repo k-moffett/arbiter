@@ -4,8 +4,8 @@
  * Parameter interfaces for dependency injection container operations.
  */
 
-import type { ServiceLifetime } from './enums';
-import type { ServiceFactory, ServiceIdentifier, ServiceName } from './types';
+import type { ServiceLifetime } from './enums.js';
+import type { ServiceFactory, ServiceIdentifier, ServiceName } from './types.js';
 
 /**
  * Register Service Parameters

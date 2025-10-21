@@ -12,10 +12,10 @@
  */
 
 // Base classes and types
-export * from './_base';
+export * from './_base/index.js';
 
 // Infrastructure implementations
-export * from './_infrastructure';
+export * from './_infrastructure/index.js';
 
 // Utility libraries
-// export * from './_lib'; // TODO: Uncomment when lib utilities are implemented
+// export * from './_lib/index.js'; // TODO: Uncomment when lib utilities are implemented

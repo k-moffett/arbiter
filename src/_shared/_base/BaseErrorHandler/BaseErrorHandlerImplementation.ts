@@ -35,9 +35,9 @@ import type {
   CreateValidationErrorParams,
   HandleErrorParams,
   IsOperationalParams,
-} from './interfaces';
+} from './interfaces.js';
 
-import { DomainError } from './DomainError';
+import { DomainError } from './DomainError/index.js';
 
 export abstract class BaseErrorHandler {
   /**

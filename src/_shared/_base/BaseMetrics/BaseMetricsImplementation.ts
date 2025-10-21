@@ -34,8 +34,8 @@ import type {
   ResetParams,
   SetGaugeParams,
   StartTimerParams,
-} from './interfaces';
-import type { TimerFunction } from './types';
+} from './interfaces.js';
+import type { TimerFunction } from './types.js';
 
 export abstract class BaseMetrics {
   /**

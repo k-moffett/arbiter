@@ -84,6 +84,12 @@ services:
       # Node.js settings
       - NODE_ENV=${NODE_ENV:-production}
       - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=2048}
+
+      # Logging configuration
+      - LOG_PREFIX=${LOG_PREFIX:-[ARBITER]}
+      - LOG_FORMAT=${LOG_FORMAT:-text}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_USE_COLORS=${LOG_USE_COLORS:-true}
     depends_on:
       qdrant:
         condition: service_healthy

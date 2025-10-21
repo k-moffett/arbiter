@@ -29,11 +29,11 @@
  * ```
  */
 
-import type { ValidateFieldParams, ValidateParams } from '../../_base/BaseValidator';
-import type { ValidationError, ValidationResult } from '../../_base/BaseValidator';
-import type { RuleValidatorParams, ValidationRule } from './interfaces';
+import type { ValidateFieldParams, ValidateParams } from '../../_base/BaseValidator/index.js';
+import type { ValidationError, ValidationResult } from '../../_base/BaseValidator/index.js';
+import type { RuleValidatorParams, ValidationRule } from './interfaces.js';
 
-import { BaseValidator } from '../../_base/BaseValidator';
+import { BaseValidator } from '../../_base/BaseValidator/index.js';
 
 /* eslint-disable perfectionist/sort-classes -- Public methods before private is correct */
 export class RuleValidator extends BaseValidator {

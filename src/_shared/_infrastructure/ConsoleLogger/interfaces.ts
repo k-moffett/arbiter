@@ -4,7 +4,7 @@
  * Interface definitions for ConsoleLogger configuration.
  */
 
-import type { LogContext, LogLevel } from '../../_base/BaseLogger';
+import type { LogContext, LogLevel } from '../../_base/BaseLogger/index.js';
 
 /**
  * Constructor parameters for ConsoleLogger

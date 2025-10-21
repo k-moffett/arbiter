@@ -59,14 +59,14 @@ import type {
   ScopedParams,
   SingletonParams,
   TransientParams,
-} from '../../_base/ServiceContainer';
+} from '../../_base/ServiceContainer/index.js';
 
 import { Container } from 'inversify';
 
 import {
   BaseServiceContainer,
   ServiceLifetime,
-} from '../../_base/ServiceContainer';
+} from '../../_base/ServiceContainer/index.js';
 
  
 export class InversifyServiceContainer extends BaseServiceContainer {

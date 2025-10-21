@@ -22,8 +22,8 @@
  * ```
  */
 
-import type { ValidateFieldParams, ValidateParams } from './interfaces';
-import type { ValidationResult } from './types';
+import type { ValidateFieldParams, ValidateParams } from './interfaces.js';
+import type { ValidationResult } from './types.js';
 
 export abstract class BaseValidator {
   /**

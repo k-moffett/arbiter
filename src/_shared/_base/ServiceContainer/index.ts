@@ -11,10 +11,10 @@
  */
 
 // Base class
-export { BaseServiceContainer } from './BaseServiceContainerImplementation';
+export { BaseServiceContainer } from './BaseServiceContainerImplementation.js';
 
 // Enums
-export { ServiceLifetime } from './enums';
+export { ServiceLifetime } from './enums.js';
 
 // Interfaces
 export type {
@@ -25,11 +25,11 @@ export type {
   ScopedParams,
   SingletonParams,
   TransientParams,
-} from './interfaces';
+} from './interfaces.js';
 
 // Types
 export type {
   ServiceFactory,
   ServiceIdentifier,
   ServiceName,
-} from './types';
+} from './types.js';

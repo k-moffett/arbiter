@@ -34,12 +34,12 @@ import type {
   ResetParams,
   SetGaugeParams,
   StartTimerParams,
-} from '../../_base/BaseMetrics';
-import type { TimerFunction } from '../../_base/BaseMetrics';
-import type { MetricEntry } from './interfaces';
+} from '../../_base/BaseMetrics/index.js';
+import type { TimerFunction } from '../../_base/BaseMetrics/index.js';
+import type { MetricEntry } from './interfaces.js';
 
-import { BaseMetrics } from '../../_base/BaseMetrics';
-import { labelsMatch } from './utils';
+import { BaseMetrics } from '../../_base/BaseMetrics/index.js';
+import { labelsMatch } from './utils.js';
 
  
 export class SimpleMetrics extends BaseMetrics {

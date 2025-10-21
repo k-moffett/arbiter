@@ -4,7 +4,7 @@
  * Exports the BaseMetrics abstract class and related types.
  */
 
-export { BaseMetrics } from './BaseMetricsImplementation';
+export { BaseMetrics } from './BaseMetricsImplementation.js';
 export type {
   GetMetricParams,
   IncrementParams,
@@ -12,5 +12,5 @@ export type {
   ResetParams,
   SetGaugeParams,
   StartTimerParams,
-} from './interfaces';
-export type { EndTimerParams, TimerFunction } from './types';
+} from './interfaces.js';
+export type { EndTimerParams, TimerFunction } from './types.js';

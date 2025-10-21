@@ -4,4 +4,4 @@
  * Exports the SimpleMetrics implementation and related types.
  */
 
-export { SimpleMetrics } from './SimpleMetricsImplementation';
+export { SimpleMetrics } from './SimpleMetricsImplementation.js';

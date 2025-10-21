@@ -4,7 +4,7 @@
  * ANSI color codes and configuration constants for console output.
  */
 
-import { LogLevel } from '../../_base/BaseLogger';
+import { LogLevel } from '../../_base/BaseLogger/index.js';
 
 /**
  * ANSI color codes for log levels

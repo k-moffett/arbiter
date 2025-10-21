@@ -67,7 +67,7 @@ import type {
   ScopedParams,
   SingletonParams,
   TransientParams,
-} from './interfaces';
+} from './interfaces.js';
 
 export abstract class BaseServiceContainer {
   /**

@@ -23,24 +23,26 @@
  */
 
 // Re-export all base classes from src/shared/base
-export * from '../_base';
+export * from '../_base/index.js';
 
 // Implementations
-export { ConsoleLogger } from './ConsoleLogger';
-export type { ConsoleLoggerParams } from './ConsoleLogger';
-export { InversifyServiceContainer } from './InversifyServiceContainer';
-export { Logger } from './Logger';
-export type { ErrorLogData, LoggerParams, LogMetadata, StandardLogData } from './Logger';
-export { MemoryCache } from './MemoryCache';
-export type { MemoryCacheParams } from './MemoryCache';
-export { RuleValidator } from './RuleValidator';
-export type { RuleValidatorParams, ValidationRule } from './RuleValidator';
-export { SimpleMetrics } from './SimpleMetrics';
-export { StandardErrorHandler } from './StandardErrorHandler';
-export type { StandardErrorHandlerParams } from './StandardErrorHandler';
+export { ConsoleLogger } from './ConsoleLogger/index.js';
+export type { ConsoleLoggerParams } from './ConsoleLogger/index.js';
+export { InversifyServiceContainer } from './InversifyServiceContainer/index.js';
+export { JSONLogger } from './JSONLogger/index.js';
+export type { JSONLogEntry, JSONLoggerParams } from './JSONLogger/index.js';
+export { Logger } from './Logger/index.js';
+export type { ErrorLogData, LoggerParams, LogMetadata, StandardLogData } from './Logger/index.js';
+export { MemoryCache } from './MemoryCache/index.js';
+export type { MemoryCacheParams } from './MemoryCache/index.js';
+export { RuleValidator } from './RuleValidator/index.js';
+export type { RuleValidatorParams, ValidationRule } from './RuleValidator/index.js';
+export { SimpleMetrics } from './SimpleMetrics/index.js';
+export { StandardErrorHandler } from './StandardErrorHandler/index.js';
+export type { StandardErrorHandlerParams } from './StandardErrorHandler/index.js';
 
-export { ZodValidator } from './ZodValidator';
-export type { ZodSchema, ZodValidatorParams } from './ZodValidator';
+export { ZodValidator } from './ZodValidator/index.js';
+export type { ZodSchema, ZodValidatorParams } from './ZodValidator/index.js';
 
 // Re-export Zod for convenience
 export { z } from 'zod';

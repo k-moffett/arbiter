@@ -20,8 +20,8 @@
  * ```
  */
 
-import type { LogLevel } from './enums';
-import type { ChildLoggerParams, LogParams, SetLevelParams } from './interfaces';
+import type { LogLevel } from './enums.js';
+import type { ChildLoggerParams, LogParams, SetLevelParams } from './interfaces.js';
 
 export abstract class BaseLogger {
   /**

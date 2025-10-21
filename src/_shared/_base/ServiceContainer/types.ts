@@ -4,7 +4,7 @@
  * Type definitions for dependency injection service container.
  */
 
-import type { BaseServiceContainer } from './BaseServiceContainerImplementation';
+import type { BaseServiceContainer } from './BaseServiceContainerImplementation.js';
 
 /**
  * Service Identifier

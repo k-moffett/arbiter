@@ -12,7 +12,7 @@
  */
 
 // BaseCache
-export { BaseCache } from './BaseCache';
+export { BaseCache } from './BaseCache/index.js';
 export type {
   CacheEntry,
   CacheOptions,
@@ -20,29 +20,29 @@ export type {
   GetCacheParams,
   HasCacheParams,
   SetCacheParams,
-} from './BaseCache';
+} from './BaseCache/index.js';
 
 // BaseErrorHandler + DomainError
-export { BaseErrorHandler, DomainError } from './BaseErrorHandler';
+export { BaseErrorHandler, DomainError } from './BaseErrorHandler/index.js';
 export type {
   CreateErrorParams,
   CreateValidationErrorParams,
   DomainErrorParams,
   HandleErrorParams,
   IsOperationalParams,
-} from './BaseErrorHandler';
+} from './BaseErrorHandler/index.js';
 
 // BaseLogger
-export { BaseLogger, LogLevel } from './BaseLogger';
+export { BaseLogger, LogLevel } from './BaseLogger/index.js';
 export type {
   ChildLoggerParams,
   LogContext,
   LogParams,
   SetLevelParams,
-} from './BaseLogger';
+} from './BaseLogger/index.js';
 
 // BaseMetrics
-export { BaseMetrics } from './BaseMetrics';
+export { BaseMetrics } from './BaseMetrics/index.js';
 export type {
   EndTimerParams,
   GetMetricParams,
@@ -52,20 +52,20 @@ export type {
   SetGaugeParams,
   StartTimerParams,
   TimerFunction,
-} from './BaseMetrics';
+} from './BaseMetrics/index.js';
 
 // BaseValidator
-export { BaseValidator } from './BaseValidator';
+export { BaseValidator } from './BaseValidator/index.js';
 export type {
   ValidateFieldParams,
   ValidateParams,
   ValidationError,
   ValidationResult,
   ValidationWarning,
-} from './BaseValidator';
+} from './BaseValidator/index.js';
 
 // BaseServiceContainer
-export { BaseServiceContainer, ServiceLifetime } from './ServiceContainer';
+export { BaseServiceContainer, ServiceLifetime } from './ServiceContainer/index.js';
 export type {
   ClearParams,
   HasParams,
@@ -77,4 +77,4 @@ export type {
   ServiceName,
   SingletonParams,
   TransientParams,
-} from './ServiceContainer';
+} from './ServiceContainer/index.js';

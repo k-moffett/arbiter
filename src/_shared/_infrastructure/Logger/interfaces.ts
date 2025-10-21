@@ -4,8 +4,8 @@
  * Interface definitions for Logger configuration.
  */
 
-import type { BaseLogger, LogLevel } from '../../_base/BaseLogger';
-import type { LogMetadata } from './types';
+import type { BaseLogger, LogLevel } from '../../_base/BaseLogger/index.js';
+import type { LogMetadata } from './types.js';
 
 /**
  * Constructor parameters for Logger

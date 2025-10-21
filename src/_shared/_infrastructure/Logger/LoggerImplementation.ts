@@ -6,7 +6,8 @@
  *
  * Features:
  * - Automatic metadata inclusion (className, serviceName, method)
- * - Environment variable configuration (LOG_LEVEL, LOG_USE_COLORS, LOG_TO_CONSOLE)
+ * - Log prefix for easy filtering (configurable via LOG_PREFIX, default: [ARBITER])
+ * - Environment variable configuration (LOG_LEVEL, LOG_USE_COLORS, LOG_TO_CONSOLE, LOG_PREFIX)
  * - Proper error serialization (stack, message, name)
  * - DI-friendly for injecting logger instances per class
  *
@@ -28,16 +29,18 @@ import type {
   ChildLoggerParams,
   LogParams,
   SetLevelParams,
-} from '../../_base/BaseLogger';
-import type { LoggerParams } from './interfaces';
-import type { ErrorLogData, LogMetadata, StandardLogData } from './types';
+} from '../../_base/BaseLogger/index.js';
+import type { LoggerParams } from './interfaces.js';
+import type { ErrorLogData, LogMetadata, StandardLogData } from './types.js';
 
-import { BaseLogger, LogLevel } from '../../_base/BaseLogger';
-import { ConsoleLogger } from '../ConsoleLogger';
+import { BaseLogger, LogLevel } from '../../_base/BaseLogger/index.js';
+import { ConsoleLogger } from '../ConsoleLogger/index.js';
+import { JSONLogger } from '../JSONLogger/index.js';
 
 export class Logger extends BaseLogger {
   private readonly implementation: BaseLogger;
   private readonly metadata: LogMetadata;
+  private readonly prefix: string;
 
   /**
    * Create a new Logger instance
@@ -51,6 +54,10 @@ export class Logger extends BaseLogger {
     super();
 
     this.metadata = params.metadata ?? {};
+
+    // Read log prefix from environment or use default
+    // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
+    this.prefix = process.env['LOG_PREFIX'] ?? '[ARBITER]';
 
     // Determine implementation based on environment
     if (params.implementation !== undefined) {
@@ -78,21 +85,21 @@ export class Logger extends BaseLogger {
   public debug(params: LogParams & StandardLogData): void {
     this.implementation.debug({
       context: this.mergeStandardContext({ logData: params }),
-      message: params.message,
+      message: this.addPrefix({ message: params.message }),
     });
   }
 
   public error(params: LogParams & Partial<ErrorLogData>): void {
     this.implementation.error({
       context: this.mergeErrorContext({ logData: params }),
-      message: params.message,
+      message: this.addPrefix({ message: params.message }),
     });
   }
 
   public fatal(params: LogParams & Partial<ErrorLogData>): void {
     this.implementation.fatal({
       context: this.mergeErrorContext({ logData: params }),
-      message: params.message,
+      message: this.addPrefix({ message: params.message }),
     });
   }
 
@@ -107,7 +114,7 @@ export class Logger extends BaseLogger {
   public info(params: LogParams & StandardLogData): void {
     this.implementation.info({
       context: this.mergeStandardContext({ logData: params }),
-      message: params.message,
+      message: this.addPrefix({ message: params.message }),
     });
   }
 
@@ -118,8 +125,15 @@ export class Logger extends BaseLogger {
   public warn(params: LogParams & StandardLogData): void {
     this.implementation.warn({
       context: this.mergeStandardContext({ logData: params }),
-      message: params.message,
+      message: this.addPrefix({ message: params.message }),
     });
+  }
+
+  /**
+   * Add prefix to log message
+   */
+  private addPrefix(params: { message: string }): string {
+    return `${this.prefix} ${params.message}`;
   }
 
   /**
@@ -137,17 +151,8 @@ export class Logger extends BaseLogger {
     const logLevelEnv = process.env['LOG_LEVEL'];
     // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
     const useColorsEnv = process.env['LOG_USE_COLORS'];
-
-    // Determine if we should use ConsoleLogger
-    const shouldUseConsole =
-      logToConsole || nodeEnv === 'development' || nodeEnv === 'local';
-
-    // For now, we only have ConsoleLogger
-    // In the future, this could switch based on environment
-    if (!shouldUseConsole) {
-      // TODO: In production, might use Pino, Datadog, etc.
-      // For now, fall back to ConsoleLogger
-    }
+    // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
+    const logFormat = process.env['LOG_FORMAT'] ?? 'text';
 
     // Parse log level - handle both override and env var
     let levelString: string | undefined;
@@ -160,6 +165,24 @@ export class Logger extends BaseLogger {
     const level = this.parseLogLevel({
       levelString,
     });
+
+    // Determine logger implementation based on LOG_FORMAT
+    if (logFormat === 'json') {
+      // Use JSON structured logging
+      return new JSONLogger({ level });
+    }
+
+    // Default to console logger (text format)
+    // Determine if we should use ConsoleLogger
+    const shouldUseConsole =
+      logToConsole || nodeEnv === 'development' || nodeEnv === 'local';
+
+    // For now, we only have ConsoleLogger for text format
+    // In the future, this could switch based on environment
+    if (!shouldUseConsole) {
+      // TODO: In production, might use Pino, Datadog, etc.
+      // For now, fall back to ConsoleLogger
+    }
 
     // Parse colors setting
     const useColors = useColorsEnv === 'false' ? false : true; // Default true

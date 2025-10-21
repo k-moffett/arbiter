@@ -23,12 +23,12 @@ import type {
   ChildLoggerParams,
   LogParams,
   SetLevelParams,
-} from '../../_base/BaseLogger';
-import type { LogContext } from '../../_base/BaseLogger';
-import type { ConsoleLoggerParams } from './interfaces';
+} from '../../_base/BaseLogger/index.js';
+import type { LogContext } from '../../_base/BaseLogger/index.js';
+import type { ConsoleLoggerParams } from './interfaces.js';
 
-import { BaseLogger, LogLevel } from '../../_base/BaseLogger';
-import { ANSI_COLORS, ANSI_RESET, STDERR_LOG_LEVELS } from './consts';
+import { BaseLogger, LogLevel } from '../../_base/BaseLogger/index.js';
+import { ANSI_COLORS, ANSI_RESET, STDERR_LOG_LEVELS } from './consts.js';
 
  
 export class ConsoleLogger extends BaseLogger {

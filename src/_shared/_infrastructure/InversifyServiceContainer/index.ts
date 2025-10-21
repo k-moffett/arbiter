@@ -17,4 +17,4 @@
  */
 
 // Implementation
-export { InversifyServiceContainer } from './InversifyServiceContainerImplementation';
+export { InversifyServiceContainer } from './InversifyServiceContainerImplementation.js';
