@@ -5,16 +5,20 @@
  * This file provides backward compatibility during migration.
  */
 
-// Shared types (JSON-RPC protocol and Session types)
+// JSON-RPC protocol types
 export type {
   JSONRPCError,
   JSONRPCRequest,
   JSONRPCResponse,
+} from './jsonrpcTypes';
+
+// Component types
+export type { MCPServerConfig } from './MCPServer/types';
+
+// Session types
+export type {
   RequestState,
   Session,
   SessionMetadata,
   TransportType,
-} from './_sharedTypes';
-
-// Component types
-export type { MCPServerConfig } from './MCPServer/types';
+} from './sessionTypes';

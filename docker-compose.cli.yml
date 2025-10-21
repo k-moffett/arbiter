@@ -1,0 +1,51 @@
+# Docker Compose - CLI Client
+# Interactive terminal interface for chatting with the agent
+# Connects to existing services (no restart policy - user controlled)
+
+version: '3.8'
+
+networks:
+  arbiter-network:
+    external: true  # Use existing network from services
+
+services:
+  # ===========================================================================
+  # CLI Client - Interactive Terminal
+  # ===========================================================================
+  cli:
+    build:
+      context: .
+      dockerfile: docker/clients/Dockerfile.cli
+      target: production
+    container_name: arbiter-cli
+    # NO restart policy - interactive session, user controlled
+    stdin_open: true  # Keep STDIN open for interactive input
+    tty: true         # Allocate pseudo-TTY for terminal
+    environment:
+      # Service URLs (Docker networking)
+      - MCP_SERVER_URL=${MCP_SERVER_URL:-http://mcp-server:3100}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+
+      # LLM configuration
+      - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+
+      # Node.js settings
+      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=1024}
+    depends_on:
+      - mcp-server
+    networks:
+      - arbiter-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+# Usage:
+# docker compose -f docker-compose.cli.yml run --rm cli
+# The --rm flag automatically removes the container after exit

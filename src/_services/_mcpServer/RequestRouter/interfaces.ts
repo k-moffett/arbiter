@@ -4,7 +4,8 @@
  * Interface definitions for Request Router.
  */
 
-import type { JSONRPCRequest, JSONRPCResponse, Session } from '../_sharedTypes';
+import type { JSONRPCRequest, JSONRPCResponse } from '../jsonrpcTypes';
+import type { Session } from '../sessionTypes';
 
 /**
  * Request router interface

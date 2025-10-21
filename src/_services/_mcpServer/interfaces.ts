@@ -8,8 +8,8 @@
 import type {
   JSONRPCRequest,
   JSONRPCResponse,
-  Session,
-} from './_sharedTypes';
+} from './jsonrpcTypes';
+import type { Session } from './sessionTypes';
 
 // TODO: These interfaces will be moved to their respective class directories
 // when Transport and SessionManager implementations are created

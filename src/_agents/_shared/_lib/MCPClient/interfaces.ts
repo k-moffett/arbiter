@@ -11,7 +11,7 @@ import type {
   GetRequestContextResult,
   VectorSearchContextResult,
   VectorUpsertContextResult,
-} from '../../../../_services/_mcpServer/contextTools';
+} from '../../../../_services/_mcpServer/ContextToolRegistry';
 
 /**
  * MCP Client Configuration

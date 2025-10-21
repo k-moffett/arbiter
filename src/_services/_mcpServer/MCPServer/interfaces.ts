@@ -7,13 +7,34 @@
 import type { MCPServerConfig } from './types';
 
 /**
+ * Health check response
+ */
+export interface HealthCheckResponse {
+  /** Number of active requests being processed */
+  activeRequests: number;
+  /** Memory usage information */
+  memoryUsage: {
+    heapTotal: number;
+    heapUsed: number;
+  };
+  /** Whether Qdrant connection is healthy */
+  qdrantConnected: boolean;
+  /** Number of queued requests waiting to be processed */
+  queuedRequests: number;
+  /** Health status */
+  status: 'ok';
+  /** Server uptime in milliseconds */
+  uptime: number;
+}
+
+/**
  * MCP Server interface
  */
 export interface MCPServer {
   /**
-   * Health check
+   * Health check with detailed metrics
    */
-  health(): { status: 'ok'; uptime: number };
+  health(): HealthCheckResponse;
 
   /**
    * Start the server
@@ -23,5 +44,5 @@ export interface MCPServer {
   /**
    * Stop the server
    */
-  stop(): void;
+  stop(): Promise<void>;
 }

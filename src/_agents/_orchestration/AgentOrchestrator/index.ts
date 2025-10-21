@@ -17,11 +17,11 @@
  */
 
 // Barrel exports
+export { AgentOrchestratorImplementation as AgentOrchestrator } from './AgentOrchestratorImplementation';
 export * from './interfaces';
 export * from './types';
 
 // TODO: Export implementations when ready
-// export { AgentOrchestratorImplementation as AgentOrchestrator } from './AgentOrchestrator';
 // export { DockerAgentSpawnerImplementation as DockerAgentSpawner } from './DockerAgentSpawner';
 // export { AgentPoolManagerImplementation as AgentPoolManager } from './AgentPoolManager';
 // export { QueryDecomposerImplementation as QueryDecomposer } from './QueryDecomposer';

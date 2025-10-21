@@ -17,15 +17,11 @@
  * ```
  */
 
-// Barrel exports
-export * from './contextTools';
-export * from './interfaces';
+// Barrel exports (sorted alphabetically, underscore-prefixed paths first)
+export type { StdioTransportConfig } from './_transports/StdioTransport';
+export { StdioTransport } from './_transports/StdioTransport';
+export type { HTTPTransportConfig } from './_transports/StreamableHTTPTransport';
+export { StreamableHTTPTransport } from './_transports/StreamableHTTPTransport';
+export * from './ContextToolRegistry';
 export { MCPServer } from './MCPServer';
-
-// Export implementations
 export { RequestRouter } from './RequestRouter';
-export * from './types';
-
-// TODO: Export transport implementations when ready
-// export { StdioTransport } from './StdioTransport';
-// export { StreamableHTTPTransport } from './StreamableHTTPTransport';

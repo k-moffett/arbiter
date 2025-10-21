@@ -24,7 +24,7 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.7.4
     container_name: arbiter-qdrant
-    restart: unless-stopped
+    restart: unless-stopped  # Persist - no rebuild on requests
     ports:
       - "6333:6333"  # REST API
       - "6334:6334"  # gRPC API
@@ -59,7 +59,7 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: arbiter-ollama
-    restart: unless-stopped
+    restart: unless-stopped  # Persist - no rebuild on requests, GPU expensive to restart
     ports:
       - "11434:11434"
     volumes:
@@ -164,7 +164,7 @@ services:
       "
     networks:
       - arbiter-network
-    restart: "no"
+    restart: "no"  # One-time init - exit after pulling models
 
   # ===========================================================================
   # Qdrant Web UI (Optional - for development/debugging)

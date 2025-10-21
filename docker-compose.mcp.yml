@@ -1,0 +1,110 @@
+# Docker Compose - MCP Server Stack
+# Long-running MCP context server with Qdrant dependency
+# Services persist across requests (restart: unless-stopped)
+
+version: '3.8'
+
+networks:
+  arbiter-network:
+    driver: bridge
+    name: arbiter-network
+
+volumes:
+  qdrant_storage:
+    name: arbiter-qdrant-storage
+    driver: local
+
+services:
+  # ===========================================================================
+  # Qdrant Vector Database
+  # ===========================================================================
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: arbiter-qdrant
+    restart: unless-stopped  # Persist - no rebuild on requests
+    ports:
+      - "6333:6333"  # REST API
+      - "6334:6334"  # gRPC API
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__LOG_LEVEL=INFO
+      # Production optimizations
+      - QDRANT__STORAGE__OPTIMIZERS__MEMMAP_THRESHOLD=20000
+      - QDRANT__STORAGE__OPTIMIZERS__INDEXING_THRESHOLD=20000
+    healthcheck:
+      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/localhost/6333 && echo -e 'GET /health HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    networks:
+      - arbiter-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================================================
+  # MCP Server - Context API
+  # ===========================================================================
+  mcp-server:
+    build:
+      context: .
+      dockerfile: docker/services/Dockerfile.mcp-server
+      target: production
+    container_name: arbiter-mcp-server
+    restart: unless-stopped  # Persist - no rebuild on requests
+    ports:
+      - "3100:3100"  # HTTP API
+    environment:
+      # Service URLs (Docker networking)
+      - QDRANT_URL=http://qdrant:6333
+      - AGENT_ORCHESTRATOR_URL=${AGENT_ORCHESTRATOR_URL:-http://agent-orchestrator:3200}
+
+      # MCP Server configuration
+      - TRANSPORT=${TRANSPORT:-streamable-http}
+      - MCP_HTTP_PORT=${MCP_HTTP_PORT:-3100}
+
+      # Concurrency settings
+      - MAX_CONCURRENT_REQUESTS=${MAX_CONCURRENT_REQUESTS:-50}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30000}
+
+      # Node.js settings
+      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=2048}
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/localhost/3100 && echo -e 'GET /health HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - arbiter-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

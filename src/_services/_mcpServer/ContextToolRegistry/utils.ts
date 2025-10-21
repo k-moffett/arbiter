@@ -1,55 +1,27 @@
 /**
- * Context Tool Handlers
+ * Context Tool Registry Utilities
  *
- * Implementation functions for MCP context tools.
- * These handlers are called by the MCP server when agents invoke context tools.
+ * Pure helper functions for context tool operations.
  */
 
-import type { QdrantClientAdapter } from '../../_data/_repositories/QdrantClientAdapter';
+import type { QdrantClientAdapter } from '../../../_data/_repositories/QdrantClientAdapter';
 import type {
   ContextPayload,
   ContextSearchFilters,
   GetRequestContextParams,
   GetRequestContextResult,
+  QdrantFilters,
+  SearchResult,
   VectorSearchContextParams,
   VectorSearchContextResult,
   VectorUpsertContextParams,
   VectorUpsertContextResult,
-} from './contextTools';
-
-/**
- * Handler dependencies
- */
-export interface ContextToolHandlerDependencies {
-  /** Qdrant client for vector operations */
-  qdrantClient: QdrantClientAdapter;
-}
-
-/**
- * Context tool handlers return type
- */
-export interface ContextToolHandlers {
-  handleGetRequestContext(params: unknown): Promise<GetRequestContextResult>;
-  handleVectorSearchContext(params: unknown): Promise<VectorSearchContextResult>;
-  handleVectorUpsertContext(params: unknown): Promise<VectorUpsertContextResult>;
-}
-
-/**
- * Qdrant filter object type
- */
-interface QdrantFilters {
-  [key: string]: unknown;
-  agentType?: string;
-  requestId?: string;
-  sessionId: string;
-  tags?: string[];
-  userFeedback?: string;
-}
+} from './types';
 
 /**
  * Build Qdrant filters from context search filters
  */
-function buildQdrantFilters(params: {
+export function buildQdrantFilters(params: {
   filters: ContextSearchFilters | undefined;
   sessionId: string;
 }): QdrantFilters {
@@ -86,28 +58,9 @@ function buildQdrantFilters(params: {
 }
 
 /**
- * Search result metadata type
- */
-interface SearchResultMetadata {
-  [key: string]: unknown;
-  agentType?: string;
-  requestId?: string;
-  tags?: string[];
-}
-
-/**
- * Search result type
- */
-interface SearchResult {
-  id: string;
-  metadata: SearchResultMetadata;
-  score: number;
-}
-
-/**
  * Apply exclude filters to search results
  */
-function applyExcludeFilters(params: {
+export function applyExcludeFilters(params: {
   filters: ContextSearchFilters | undefined;
   results: SearchResult[];
 }): SearchResult[] {
@@ -149,14 +102,14 @@ function applyExcludeFilters(params: {
 /**
  * Create a zero vector for placeholder searches
  */
-function createZeroVector(): number[] {
+export function createZeroVector(): number[] {
   return new Array(768).fill(0) as number[];
 }
 
 /**
  * Handle vector_upsert_context tool
  */
-async function handleVectorUpsertContext(params: {
+export async function handleVectorUpsertContext(params: {
   params: unknown;
   qdrantClient: QdrantClientAdapter;
 }): Promise<VectorUpsertContextResult> {
@@ -207,7 +160,7 @@ async function handleVectorUpsertContext(params: {
 /**
  * Handle vector_search_context tool
  */
-async function handleVectorSearchContext(params: {
+export async function handleVectorSearchContext(params: {
   params: unknown;
   qdrantClient: QdrantClientAdapter;
 }): Promise<VectorSearchContextResult> {
@@ -246,7 +199,7 @@ async function handleVectorSearchContext(params: {
 /**
  * Handle get_request_context tool
  */
-async function handleGetRequestContext(params: {
+export async function handleGetRequestContext(params: {
   params: unknown;
   qdrantClient: QdrantClientAdapter;
 }): Promise<GetRequestContextResult> {
@@ -317,22 +270,4 @@ async function handleGetRequestContext(params: {
   }
 
   return result;
-}
-
-/**
- * Create context tool handlers
- */
-export function createContextToolHandlers(
-  deps: ContextToolHandlerDependencies
-): ContextToolHandlers {
-  const { qdrantClient } = deps;
-
-  return {
-    handleGetRequestContext: async (params: unknown) =>
-      handleGetRequestContext({ params, qdrantClient }),
-    handleVectorSearchContext: async (params: unknown) =>
-      handleVectorSearchContext({ params, qdrantClient }),
-    handleVectorUpsertContext: async (params: unknown) =>
-      handleVectorUpsertContext({ params, qdrantClient }),
-  };
 }

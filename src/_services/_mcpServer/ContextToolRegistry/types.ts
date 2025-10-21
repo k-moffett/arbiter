@@ -1,8 +1,7 @@
 /**
- * MCP Context Tool Definitions
+ * Context Tool Registry Types
  *
- * Tool schemas for context system operations via MCP protocol.
- * These tools provide Qdrant access to all agents without direct connections.
+ * Type definitions for MCP context tools.
  */
 
 /**
@@ -156,100 +155,32 @@ export interface GetRequestContextResult {
 }
 
 /**
- * MCP tool registry entry for context tools
+ * Qdrant filter object type
  */
-export interface ContextToolDefinition {
-  description: string;
-  inputSchema: Record<string, unknown>;
-  name: string;
+export interface QdrantFilters {
+  [key: string]: unknown;
+  agentType?: string;
+  requestId?: string;
+  sessionId: string;
+  tags?: string[];
+  userFeedback?: string;
 }
 
 /**
- * All context tools available via MCP
+ * Search result metadata type
  */
-export const CONTEXT_TOOLS: ContextToolDefinition[] = [
-  {
-    description: 'Store message embedding in Qdrant conversation-history collection',
-    inputSchema: {
-      properties: {
-        agentType: { type: 'string' },
-        containerInstanceId: { type: 'string' },
-        messageId: { type: 'string' },
-        parentRequestId: { type: 'string' },
-        payload: {
-          properties: {
-            agentType: { type: 'string' },
-            channelId: { type: 'string' },
-            containerInstanceId: { type: 'string' },
-            content: { type: 'string' },
-            embeddedText: { type: 'string' },
-            intentCategory: { type: 'string' },
-            processingTimeMs: { type: 'number' },
-            role: { enum: ['user', 'bot'], type: 'string' },
-            sessionId: { type: 'string' },
-            tags: { items: { type: 'string' }, type: 'array' },
-            timestamp: { type: 'number' },
-            userId: { type: 'string' },
-            userFeedback: { enum: ['success', 'failure', 'neutral'], type: 'string' },
-          },
-          required: [
-            'agentType',
-            'channelId',
-            'containerInstanceId',
-            'content',
-            'embeddedText',
-            'role',
-            'sessionId',
-            'tags',
-            'timestamp',
-            'userId',
-          ],
-          type: 'object',
-        },
-        requestId: { type: 'string' },
-        rootRequestId: { type: 'string' },
-        vector: { items: { type: 'number' }, type: 'array' },
-      },
-      required: ['messageId', 'requestId', 'rootRequestId', 'vector', 'payload'],
-      type: 'object',
-    },
-    name: 'vector_upsert_context',
-  },
-  {
-    description: 'Semantic search in conversation history with filtering',
-    inputSchema: {
-      properties: {
-        filters: {
-          properties: {
-            agentType: { type: 'string' },
-            excludeRequestId: { type: 'string' },
-            excludeTags: { items: { type: 'string' }, type: 'array' },
-            requestId: { type: 'string' },
-            tags: { items: { type: 'string' }, type: 'array' },
-            userFeedback: { enum: ['success', 'failure'], type: 'string' },
-          },
-          type: 'object',
-        },
-        limit: { type: 'number' },
-        query: { type: 'string' },
-        sessionId: { type: 'string' },
-      },
-      required: ['query', 'sessionId'],
-      type: 'object',
-    },
-    name: 'vector_search_context',
-  },
-  {
-    description: 'Retrieve all messages for a specific request chain',
-    inputSchema: {
-      properties: {
-        includeParent: { type: 'boolean' },
-        includeSidechains: { type: 'boolean' },
-        requestId: { type: 'string' },
-      },
-      required: ['requestId', 'includeParent', 'includeSidechains'],
-      type: 'object',
-    },
-    name: 'get_request_context',
-  },
-];
+export interface SearchResultMetadata {
+  [key: string]: unknown;
+  agentType?: string;
+  requestId?: string;
+  tags?: string[];
+}
+
+/**
+ * Search result type
+ */
+export interface SearchResult {
+  id: string;
+  metadata: SearchResultMetadata;
+  score: number;
+}

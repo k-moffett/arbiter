@@ -5,7 +5,7 @@
  * Manages tool and resource registration.
  */
 
-import type { JSONRPCRequest, JSONRPCResponse } from '../_sharedTypes';
+import type { JSONRPCRequest, JSONRPCResponse } from '../jsonrpcTypes';
 import type {
   RegisterResourceParams,
   RegisterToolParams,

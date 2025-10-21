@@ -5,12 +5,15 @@
  * Provides centralized access to Qdrant for all agent containers.
  */
 
-import type { MCPServer } from './interfaces';
+import type { Transport } from '../interfaces';
+import type { JSONRPCRequest, JSONRPCResponse } from '../jsonrpcTypes';
+import type { HealthCheckResponse, MCPServer } from './interfaces';
 import type { MCPServerConfig } from './types';
 
 import { QdrantClientAdapter } from '../../../_data/_repositories/QdrantClientAdapter';
-import { createContextToolHandlers } from '../contextToolHandlers';
-import { CONTEXT_TOOLS } from '../contextTools';
+import { StdioTransport } from '../_transports/StdioTransport';
+import { StreamableHTTPTransport } from '../_transports/StreamableHTTPTransport';
+import { ContextToolRegistry } from '../ContextToolRegistry';
 import { RequestRouter } from '../RequestRouter';
 
 /**
@@ -28,20 +31,39 @@ import { RequestRouter } from '../RequestRouter';
  * ```
  */
 export class MCPServerImplementation implements MCPServer {
+  private readonly activeRequests: Map<string, Date> = new Map();
+  private contextToolRegistry: ContextToolRegistry | null = null;
   private isRunning: boolean = false;
+  private readonly maxConcurrentRequests: number;
   private qdrantClient: QdrantClientAdapter | null = null;
+  private readonly requestTimeout: number;
   private router: RequestRouter | null = null;
   private startTime: number = 0;
+  private transport: Transport | null = null;
+
+  constructor() {
+    this.maxConcurrentRequests = 50;  // Default, overridden by config
+    this.requestTimeout = 30000;       // Default, overridden by config
+  }
 
   /**
-   * Health check
+   * Health check with detailed metrics
    */
-  public health(): { status: 'ok'; uptime: number } {
+  public health(): HealthCheckResponse {
     if (!this.isRunning) {
       throw new Error('Server is not running');
     }
 
+    const memUsage = process.memoryUsage();
+
     return {
+      activeRequests: this.activeRequests.size,
+      memoryUsage: {
+        heapTotal: memUsage.heapTotal,
+        heapUsed: memUsage.heapUsed,
+      },
+      qdrantConnected: this.qdrantClient !== null,
+      queuedRequests: 0, // No queue in simple polling approach
       status: 'ok',
       uptime: Date.now() - this.startTime,
     };
@@ -56,6 +78,17 @@ export class MCPServerImplementation implements MCPServer {
     }
 
     this.startTime = Date.now();
+
+    // Apply configuration overrides
+    if (config.maxConcurrentRequests !== undefined) {
+      // Use type assertion to assign to readonly property during initialization
+      (this as unknown as { maxConcurrentRequests: number }).maxConcurrentRequests =
+        config.maxConcurrentRequests;
+    }
+
+    if (config.requestTimeout !== undefined) {
+      (this as unknown as { requestTimeout: number }).requestTimeout = config.requestTimeout;
+    }
 
     // Initialize Qdrant client
     const qdrantConfig: {
@@ -76,15 +109,19 @@ export class MCPServerImplementation implements MCPServer {
     // Ensure collection exists
     await this.ensureCollection();
 
+    // Initialize context tool registry
+    this.contextToolRegistry = new ContextToolRegistry({
+      qdrantClient: this.qdrantClient,
+    });
+
     // Initialize request router
     this.router = new RequestRouter();
 
     // Register context tools
     this.registerContextTools();
 
-    // TODO: Initialize transports based on config
-    // For now, we'll just mark the server as running
-    // Transport initialization will be implemented in a future phase
+    // Initialize and start transport
+    await this.initializeTransport(config);
 
     this.isRunning = true;
 
@@ -95,13 +132,18 @@ export class MCPServerImplementation implements MCPServer {
   /**
    * Stop the MCP server
    */
-  public stop(): void {
+  public async stop(): Promise<void> {
     if (!this.isRunning) {
       throw new Error('Server is not running');
     }
 
-    // TODO: Stop transports
+    // Stop transport
+    if (this.transport !== null) {
+      await this.transport.stop();
+      this.transport = null;
+    }
 
+    this.contextToolRegistry = null;
     this.router = null;
     this.qdrantClient = null;
     this.isRunning = false;
@@ -183,20 +225,112 @@ export class MCPServerImplementation implements MCPServer {
   }
 
   /**
+   * Execute request with concurrency control
+   */
+  private async executeWithConcurrencyControl(params: {
+    request: JSONRPCRequest;
+  }): Promise<JSONRPCResponse> {
+    const requestId = `req_${String(Date.now())}_${String(Math.random()).slice(2, 8)}`;
+
+    // Check if we can process immediately
+    if (this.activeRequests.size < this.maxConcurrentRequests) {
+      return await this.processRequest({ request: params.request, requestId });
+    }
+
+    // Wait until capacity is available
+    while (this.activeRequests.size >= this.maxConcurrentRequests) {
+      // Wait a bit before checking again (polling approach)
+      // eslint-disable-next-line local-rules/no-promise-constructor -- Wrapping callback-based setTimeout API
+      await new Promise((resolve) => {
+        setTimeout(resolve, 100);
+      });
+    }
+
+    // Now process the request
+    return await this.processRequest({ request: params.request, requestId });
+  }
+
+  /**
+   * Handle incoming JSON-RPC request from transport
+   * Applies concurrency control, timeout, and queuing
+   */
+  private async handleRequest(request: JSONRPCRequest): Promise<JSONRPCResponse> {
+    return await this.executeWithConcurrencyControl({ request });
+  }
+
+  /**
+   * Initialize and start transport
+   */
+  private async initializeTransport(config: MCPServerConfig): Promise<void> {
+    const transportType = config.transports[0]; // Use first transport for MVP
+
+    if (transportType === 'stdio') {
+      this.transport = new StdioTransport({ debug: true });
+    } else if (transportType === 'streamable-http') {
+      this.transport = new StreamableHTTPTransport({
+        debug: true,
+        port: config.httpPort ?? 3100,
+      });
+    } else {
+      throw new Error(`Unsupported transport type: ${String(transportType)}`);
+    }
+
+    // Wire router to transport
+    this.transport.onRequest(async (req) => this.handleRequest(req));
+
+    // Start transport
+    await this.transport.start();
+  }
+
+  /**
    * Log startup information
    */
   private logStartup(config: MCPServerConfig): void {
-    const qdrantUrl = config.qdrantUrl ?? 'http://qdrant:6333';
-    const toolCount = String(CONTEXT_TOOLS.length);
+    if (this.contextToolRegistry === null) {
+      throw new Error('Context tool registry not initialized');
+    }
 
-     
+    const qdrantUrl = config.qdrantUrl ?? 'http://qdrant:6333';
+    const toolCount = String(this.contextToolRegistry.getToolDefinitions().length);
+
     console.warn('MCP Server started successfully');
-     
     console.warn(`- Qdrant URL: ${qdrantUrl}`);
-     
     console.warn('- Collection: conversation-history');
-     
     console.warn(`- Registered tools: ${toolCount}`);
+    console.warn(`- Max concurrent requests: ${String(this.maxConcurrentRequests)}`);
+    console.warn(`- Request timeout: ${String(this.requestTimeout)}ms`);
+  }
+
+  /**
+   * Process request with tracking and timeout
+   */
+  private async processRequest(params: {
+    request: JSONRPCRequest;
+    requestId: string;
+  }): Promise<JSONRPCResponse> {
+    // Track active request
+    this.activeRequests.set(params.requestId, new Date());
+
+    try {
+      // Create timeout promise
+      // eslint-disable-next-line local-rules/no-promise-constructor, local-rules/require-typed-params, @typescript-eslint/max-params -- Wrapping callback-based setTimeout API
+      const timeoutPromise = new Promise<JSONRPCResponse>((_resolve, reject) => {
+        setTimeout(() => {
+          reject(new Error(`Request timeout after ${String(this.requestTimeout)}ms`));
+        }, this.requestTimeout);
+      });
+
+      // Race between actual request and timeout
+      const response = await Promise.race([
+        this.routeRequest(params.request),
+        timeoutPromise,
+      ]);
+
+      return response;
+    } finally {
+      // Remove from active requests
+      this.activeRequests.delete(params.requestId);
+    }
   }
 
   /**
@@ -207,13 +341,11 @@ export class MCPServerImplementation implements MCPServer {
       throw new Error('Router not initialized');
     }
 
-    if (this.qdrantClient === null) {
-      throw new Error('Qdrant client not initialized');
+    if (this.contextToolRegistry === null) {
+      throw new Error('Context tool registry not initialized');
     }
 
-    const handlers = createContextToolHandlers({
-      qdrantClient: this.qdrantClient,
-    });
+    const handlers = this.contextToolRegistry.createHandlers();
 
     // Register each context tool
     this.router.registerTool({
@@ -230,5 +362,27 @@ export class MCPServerImplementation implements MCPServer {
       handler: async (params: unknown) => handlers.handleGetRequestContext(params),
       name: 'get_request_context',
     });
+  }
+
+  /**
+   * Route request through router
+   */
+  private async routeRequest(request: JSONRPCRequest): Promise<JSONRPCResponse> {
+    if (this.router === null) {
+      throw new Error('Router not initialized');
+    }
+
+    // Create minimal session for request
+    // TODO: Implement proper session management with SessionManager
+    const session = {
+      activeRequests: new Map(),
+      clientType: 'cli' as const,
+      createdAt: new Date(),
+      id: 'default-session',
+      lastAccessedAt: new Date(),
+      metadata: {},
+    };
+
+    return this.router.route({ request, session });
   }
 }
