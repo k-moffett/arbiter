@@ -36,7 +36,7 @@ export interface VectorRepository {
   /**
    * Delete collection
    */
-  deleteCollection(name: string): Promise<void>;
+  deleteCollection(params: { name: string }): Promise<void>;
 
   /**
    * Search vectors

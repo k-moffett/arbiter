@@ -30,7 +30,7 @@ import type { ConsoleLoggerParams } from './interfaces';
 import { BaseLogger, LogLevel } from '../../_base/BaseLogger';
 import { ANSI_COLORS, ANSI_RESET, STDERR_LOG_LEVELS } from './consts';
 
-/* eslint-disable perfectionist/sort-classes -- Public methods before private is correct */
+ 
 export class ConsoleLogger extends BaseLogger {
   private readonly context: LogContext;
   private level: LogLevel;

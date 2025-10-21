@@ -1,15 +1,18 @@
 /**
  * MCP Server Interfaces
  *
- * Core interfaces for the MCP server implementation.
+ * Re-exports interfaces from components and shared types.
+ * This file provides backward compatibility while components are being migrated.
  */
 
 import type {
   JSONRPCRequest,
   JSONRPCResponse,
-  MCPServerConfig,
   Session,
-} from './types';
+} from './_sharedTypes';
+
+// TODO: These interfaces will be moved to their respective class directories
+// when Transport and SessionManager implementations are created
 
 /**
  * Transport layer interface
@@ -63,55 +66,4 @@ export interface SessionManager {
    * List all active sessions
    */
   listActive(): Session[];
-}
-
-/**
- * Request router interface
- * Routes JSON-RPC requests to appropriate handlers
- */
-export interface RequestRouter {
-  /**
-   * Register resource handler
-   */
-  registerResource(name: string, handler: ResourceHandler): void;
-
-  /**
-   * Register tool handler
-   */
-  registerTool(name: string, handler: ToolHandler): void;
-
-  /**
-   * Route request to handler
-   */
-  route(session: Session, request: JSONRPCRequest): Promise<JSONRPCResponse>;
-}
-
-/**
- * Tool handler function
- */
-export type ToolHandler = (params: unknown) => Promise<unknown>;
-
-/**
- * Resource handler function
- */
-export type ResourceHandler = (params: unknown) => Promise<unknown>;
-
-/**
- * MCP Server interface
- */
-export interface MCPServer {
-  /**
-   * Health check
-   */
-  health(): Promise<{ status: 'ok'; uptime: number }>;
-
-  /**
-   * Start the server
-   */
-  start(config: MCPServerConfig): Promise<void>;
-
-  /**
-   * Stop the server
-   */
-  stop(): Promise<void>;
 }

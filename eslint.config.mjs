@@ -110,9 +110,9 @@ export default tseslint.config(
           'property',
           'constructor',
           'static-method',
-          'private-method',
+          'method',
           'protected-method',
-          'method'
+          'private-method'
         ]
       }],
 

@@ -1,0 +1,122 @@
+{
+  "cleanupPeriodDays": 14,
+  "env": {
+    "CLAUDE_CODE_MAX_OUTPUT_TOKENS": "20000",
+    "DISABLE_NON_ESSENTIAL_MODEL_CALLS": "1",
+    "MAX_THINKING_TOKENS": "8000",
+    "BASH_DEFAULT_TIMEOUT_MS": "30000",
+    "BASH_MAX_TIMEOUT_MS": "120000",
+    "DISABLE_TELEMETRY": "1",
+    "DISABLE_ERROR_REPORTING": "1",
+    "MCP_TIMEOUT": "30000"
+  },
+  "includeCoAuthoredBy": false,
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(ls:*)",
+      "Bash(mv:*)",
+      "Bash(chmod:*)",
+      "Bash(awk:*)",
+      "Bash(source:*)",
+      "Bash(cp:*)",
+      "Bash(tree:*)",
+      "Edit(.claude/aiContext/subAgentContexts/**)",
+      "Read(.claude/aiContext/subAgentContexts/**)",
+      "Read(~/code/**)",
+      "Edit(.claude/aiContext/compactHistory/**)",
+      "Read(.claude/aiContext/compactHistory/**)",
+      "Read(README.md)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "// TypeScript/JavaScript permissions",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node:*)",
+      "Bash(npm test:*)",
+      "Bash(tsc:*)",
+      "Bash(npm ls:*)",
+      "Bash(npx ts-node:*)",
+      "Bash(npx tsx:*)",
+      "Bash(npx jest test:*)",
+      "Bash(timeout 60 npx jest:*)",
+      "Bash(npx jest:*)",
+      "Bash(npx eslint:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(npm run test:integration:*)",
+      "Bash(yarn:*)",
+      "Bash(pnpm:*)",
+      "// Python permissions",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(pip:*)",
+      "Bash(pip3:*)",
+      "Bash(poetry:*)",
+      "Bash(pipenv:*)",
+      "Bash(pytest:*)",
+      "Bash(mypy:*)",
+      "Bash(black:*)",
+      "Bash(ruff:*)",
+      "Bash(flake8:*)",
+      "Bash(isort:*)",
+      "Bash(bandit:*)",
+      "Bash(coverage:*)",
+      "Bash(python -m:*)",
+      "Bash(python3 -m:*)",
+      "Bash(jupyter:*)",
+      "Bash(ipython:*)",
+      "Bash(bash:*)",
+      "WebSearch",
+      "Bash(cat:*)",
+      "Bash(curl -s \"https://wahapedia.ru/wh40k10ed/factions/emperor-s-children/Flawless-Blades\")",
+      "Bash(timeout 60 npx tsx:*)",
+      "Bash(curl -s \"https://wahapedia.ru/wh40k10ed/factions/chaos-daemons/Great-Unclean-One\")",
+      "Bash(timeout 120 npx tsx validate-fixes.ts)",
+      "Bash(curl -s -X POST \"http://localhost:6333/collections/warhammer-40k_rules/points/scroll\" -H \"Content-Type: application/json\" -d '{\n    \"\"\"\"limit\"\"\"\": 129,\n    \"\"\"\"with_payload\"\"\"\": true,\n    \"\"\"\"with_vector\"\"\"\": false\n  }')",
+      "Bash(curl:*)",
+      "Bash(xargs ls -la)",
+      "WebFetch(domain:typescript-eslint.io)",
+      "WebFetch(domain:zod.dev)",
+      "Bash(npm install)",
+      "Bash(for dir in src/_shared/lib/*/)",
+      "Bash(do echo \"=== $dir ===\")",
+      "Bash(done)",
+      "Bash(npm install inversify reflect-metadata)",
+      "Bash(npm install --save-dev @types/dockerode)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Read(./build)",
+      "Read(./.git/**)"
+    ],
+    "defaultMode": "acceptEdits"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f \".claude/aiContext/baseContext.md\" ]; then if [ $(wc -c < \".claude/aiContext/baseContext.md\") -gt 2000 ]; then echo \"⚠️ ERROR: baseContext.md is too large ($(wc -c < \".claude/aiContext/baseContext.md\") bytes > 2000). Please create a summary version under 2KB to avoid performance issues.\" >&2 && exit 2; else echo \"Project Context (key points):\" >&2 && head -15 \".claude/aiContext/baseContext.md\" >&2; fi; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -f \"package.json\" ]; then\n  echo '📦 TypeScript/JS files modified. Run quality checks: 1) npm run typecheck, 2) npm run lint, 3) npm test, 4) Remove unused imports, 5) Follow project conventions.' >&2\nelif [ -f \"requirements.txt\" ] || [ -f \"pyproject.toml\" ] || [ -f \"Pipfile\" ]; then\n  echo '🐍 Python files modified. Run quality checks: 1) mypy for type checking, 2) ruff check for linting, 3) black for formatting, 4) pytest for tests, 5) Follow PEP 8 conventions.' >&2\nelse\n  echo '📝 Files modified. Run appropriate quality checks for your language: linting, type checking, tests, and formatting.' >&2\nfi"
+          }
+        ]
+      }
+    ]
+  }
+}

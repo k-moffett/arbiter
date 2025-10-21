@@ -18,12 +18,14 @@
  */
 
 // Barrel exports
+export * from './contextTools';
 export * from './interfaces';
+export { MCPServer } from './MCPServer';
+
+// Export implementations
+export { RequestRouter } from './RequestRouter';
 export * from './types';
 
-// TODO: Export implementations when ready
-// export { MCPServerImplementation as MCPServer } from './MCPServer';
-// export { StdioTransport } from './transports/StdioTransport';
-// export { StreamableHTTPTransport } from './transports/StreamableHTTPTransport';
-// export { SessionManagerImplementation as SessionManager } from './SessionManager';
-// export { RequestRouterImplementation as RequestRouter } from './RequestRouter';
+// TODO: Export transport implementations when ready
+// export { StdioTransport } from './StdioTransport';
+// export { StreamableHTTPTransport } from './StreamableHTTPTransport';

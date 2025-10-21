@@ -68,7 +68,7 @@ import {
   ServiceLifetime,
 } from '../../_base/ServiceContainer';
 
-/* eslint-disable perfectionist/sort-classes -- Public methods before private is correct */
+ 
 export class InversifyServiceContainer extends BaseServiceContainer {
   private readonly container: Container;
   private readonly registeredIdentifiers: Set<symbol | string>;
