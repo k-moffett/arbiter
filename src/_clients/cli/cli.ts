@@ -8,8 +8,15 @@
 import { AgentOrchestrator } from '../../_agents/_orchestration/AgentOrchestrator';
 import { MCPClient } from '../../_agents/_shared/_lib/MCPClient';
 import { OllamaProvider } from '../../_agents/_shared/_lib/OllamaProvider';
+import { Logger } from '../../_shared/_infrastructure';
 import { ChatService } from '../ChatService';
 import { CLIService } from './index';
+
+const logger = new Logger({
+  metadata: {
+    serviceName: 'CLI',
+  },
+});
 
 /**
  * Main CLI entry point
@@ -27,12 +34,16 @@ async function main(): Promise<void> {
 
   const sessionId = `cli-session-${String(Date.now())}`;
 
-  console.error('[CLI] Initializing...');
-  console.error(`[CLI] Session ID: ${sessionId}`);
-  console.error(`[CLI] Ollama: ${ollamaBaseUrl}`);
-  console.error(`[CLI] MCP Server: ${mcpServerUrl}`);
-  console.error(`[CLI] LLM Model: ${llmModel}`);
-  console.error(`[CLI] Embedding Model: ${embeddingModel}`);
+  logger.info({
+    message: 'Initializing CLI',
+    context: {
+      embeddingModel,
+      llmModel,
+      mcpServerUrl,
+      ollamaBaseUrl,
+      sessionId,
+    },
+  });
 
   // Initialize Ollama provider
   const ollamaProvider = new OllamaProvider({

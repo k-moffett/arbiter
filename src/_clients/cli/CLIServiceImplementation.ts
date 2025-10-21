@@ -12,6 +12,8 @@ import type { Interface as ReadlineInterface } from 'node:readline';
 
 import * as readline from 'node:readline';
 
+import { Logger } from '../../_shared/_infrastructure';
+
 /**
  * CLI Service Implementation
  *
@@ -29,6 +31,7 @@ export class CLIServiceImplementation implements CLIService {
   private readonly chatService: ChatService;
   private debugMode: boolean;
   private isRunning: boolean = false;
+  private readonly logger: Logger;
   private rl: ReadlineInterface | null = null;
   private readonly sessionId: string;
 
@@ -36,6 +39,12 @@ export class CLIServiceImplementation implements CLIService {
     this.chatService = params.chatService;
     this.sessionId = params.sessionId;
     this.debugMode = params.debug ?? false;
+    this.logger = new Logger({
+      metadata: {
+        className: 'CLIServiceImplementation',
+        serviceName: 'CLI Service',
+      },
+    });
   }
 
   /**
@@ -91,8 +100,7 @@ export class CLIServiceImplementation implements CLIService {
     }
 
     this.isRunning = false;
-    // eslint-disable-next-line no-console -- CLI output
-    console.log('\nGoodbye! 👋');
+    this.logger.info({ message: 'Goodbye! 👋' });
     process.exit(0);
   }
 
@@ -100,18 +108,15 @@ export class CLIServiceImplementation implements CLIService {
    * Display help message
    */
   private displayHelp(): void {
-    // eslint-disable-next-line no-console -- CLI output
-    console.log('\nAvailable commands:');
-    // eslint-disable-next-line no-console -- CLI output
-    console.log('  /help     - Show this help message');
-    // eslint-disable-next-line no-console -- CLI output
-    console.log('  /history  - Show conversation history');
-    // eslint-disable-next-line no-console -- CLI output
-    console.log('  /clear    - Clear conversation history');
-    // eslint-disable-next-line no-console -- CLI output
-    console.log('  /debug    - Toggle debug mode');
-    // eslint-disable-next-line no-console -- CLI output
-    console.log('  /exit     - Exit the chat\n');
+    const helpText = `
+Available commands:
+  /help     - Show this help message
+  /history  - Show conversation history
+  /clear    - Clear conversation history
+  /debug    - Toggle debug mode
+  /exit     - Exit the chat
+`;
+    this.logger.info({ message: helpText });
   }
 
   /**
@@ -121,12 +126,11 @@ export class CLIServiceImplementation implements CLIService {
     const history = this.chatService.getHistory({ sessionId: this.sessionId });
 
     if (history.length === 0) {
-      // eslint-disable-next-line no-console -- CLI output
-      console.log('\nNo conversation history yet.\n');
+      this.logger.info({ message: 'No conversation history yet.' });
       return;
     }
 
-    const lines: string[] = ['\nConversation History:', '─'.repeat(50)];
+    const lines: string[] = ['Conversation History:', '─'.repeat(50)];
 
     for (const msg of history) {
       const role = msg.role === 'user' ? 'You' : 'Agent';
@@ -136,8 +140,7 @@ export class CLIServiceImplementation implements CLIService {
 
     lines.push('─'.repeat(50), '');
 
-    // eslint-disable-next-line no-console -- CLI output
-    console.log(lines.join('\n'));
+    this.logger.info({ message: lines.join('\n') });
   }
 
   /**
@@ -155,8 +158,7 @@ export class CLIServiceImplementation implements CLIService {
       '',
     ].join('\n');
 
-    // eslint-disable-next-line no-console -- CLI output
-    console.log(message);
+    this.logger.info({ message });
   }
 
   /**
@@ -184,8 +186,7 @@ export class CLIServiceImplementation implements CLIService {
         '/clear',
         () => {
           this.chatService.clearHistory({ sessionId: this.sessionId });
-          // eslint-disable-next-line no-console -- CLI output
-          console.log('\nConversation history cleared.\n');
+          this.logger.info({ message: 'Conversation history cleared.' });
           return { continue: true };
         },
       ],
@@ -194,8 +195,7 @@ export class CLIServiceImplementation implements CLIService {
         () => {
           this.debugMode = !this.debugMode;
           const status = this.debugMode ? 'enabled' : 'disabled';
-          // eslint-disable-next-line no-console -- CLI output
-          console.log(`\nDebug mode ${status}.\n`);
+          this.logger.info({ message: `Debug mode ${status}.` });
           return { continue: true };
         },
       ],
@@ -219,8 +219,7 @@ export class CLIServiceImplementation implements CLIService {
     const handler = commandHandlers.get(command);
 
     if (handler === undefined) {
-      // eslint-disable-next-line no-console -- CLI output
-      console.log('\nUnknown command. Type /help for available commands.\n');
+      this.logger.info({ message: 'Unknown command. Type /help for available commands.' });
       return { continue: true };
     }
 
@@ -263,16 +262,18 @@ export class CLIServiceImplementation implements CLIService {
         sessionId: this.sessionId,
       });
 
-      // eslint-disable-next-line no-console -- CLI output
-      console.log(
-        this.formatResponse({
+      this.logger.info({
+        message: this.formatResponse({
           duration: result.duration,
           message: result.botMessage,
         }),
-      );
+      });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`\nError: ${errorMessage}\n`);
+      this.logger.error({
+        error: error instanceof Error ? error : new Error(errorMessage),
+        message: 'Error processing message',
+      });
     }
 
     if (this.rl !== null) {

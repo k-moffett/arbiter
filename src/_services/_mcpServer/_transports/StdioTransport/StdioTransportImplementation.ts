@@ -10,6 +10,8 @@ import type { StdioTransportConfig } from './types';
 
 import * as readline from 'node:readline';
 
+import { Logger } from '../../../../_shared/_infrastructure';
+
 /**
  * Stdio Transport Implementation
  *
@@ -29,6 +31,7 @@ import * as readline from 'node:readline';
 export class StdioTransportImplementation implements Transport {
   private readonly debug: boolean;
   private isRunning: boolean = false;
+  private readonly logger: Logger;
   private requestHandler: ((req: JSONRPCRequest) => Promise<JSONRPCResponse>) | null = null;
   private rl: readline.Interface | null = null;
 
@@ -38,6 +41,12 @@ export class StdioTransportImplementation implements Transport {
 
   constructor(config: StdioTransportConfig = {}) {
     this.debug = config.debug ?? false;
+    this.logger = new Logger({
+      metadata: {
+        className: 'StdioTransportImplementation',
+        serviceName: 'Stdio Transport',
+      },
+    });
   }
 
   /**
@@ -59,7 +68,10 @@ export class StdioTransportImplementation implements Transport {
     process.stdout.write(`${json}\n`);
 
     if (this.debug) {
-      console.error('[StdioTransport] Sent response:', json);
+      this.logger.debug({
+        message: 'Sent response',
+        context: { response: json },
+      });
     }
 
     // Wrap in async function to satisfy interface requirement
@@ -91,7 +103,7 @@ export class StdioTransportImplementation implements Transport {
 
     this.rl.on('close', () => {
       if (this.debug) {
-        console.error('[StdioTransport] stdin closed');
+        this.logger.debug({ message: 'stdin closed' });
       }
       void this.stop();
     });
@@ -99,7 +111,7 @@ export class StdioTransportImplementation implements Transport {
     this.isRunning = true;
 
     if (this.debug) {
-      console.error('[StdioTransport] Started, listening on stdin');
+      this.logger.debug({ message: 'Started, listening on stdin' });
     }
 
     // Wrap in async function to satisfy interface requirement
@@ -122,7 +134,7 @@ export class StdioTransportImplementation implements Transport {
     this.isRunning = false;
 
     if (this.debug) {
-      console.error('[StdioTransport] Stopped');
+      this.logger.debug({ message: 'Stopped' });
     }
 
     // Wrap in async function to satisfy interface requirement
@@ -140,7 +152,10 @@ export class StdioTransportImplementation implements Transport {
     }
 
     if (this.debug) {
-      console.error('[StdioTransport] Received:', line);
+      this.logger.debug({
+        message: 'Received request',
+        context: { line },
+      });
     }
 
     try {
@@ -167,7 +182,10 @@ export class StdioTransportImplementation implements Transport {
       await this.sendResponse(errorResponse);
 
       if (this.debug) {
-        console.error('[StdioTransport] Error:', error);
+        this.logger.error({
+          message: 'Error processing request',
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
       }
     }
   }

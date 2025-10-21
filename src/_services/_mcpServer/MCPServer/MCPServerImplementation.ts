@@ -11,6 +11,7 @@ import type { HealthCheckResponse, MCPServer } from './interfaces';
 import type { MCPServerConfig } from './types';
 
 import { QdrantClientAdapter } from '../../../_data/_repositories/QdrantClientAdapter';
+import { Logger } from '../../../_shared/_infrastructure';
 import { StdioTransport } from '../_transports/StdioTransport';
 import { StreamableHTTPTransport } from '../_transports/StreamableHTTPTransport';
 import { ContextToolRegistry } from '../ContextToolRegistry';
@@ -34,6 +35,7 @@ export class MCPServerImplementation implements MCPServer {
   private readonly activeRequests: Map<string, Date> = new Map();
   private contextToolRegistry: ContextToolRegistry | null = null;
   private isRunning: boolean = false;
+  private readonly logger: Logger;
   private readonly maxConcurrentRequests: number;
   private qdrantClient: QdrantClientAdapter | null = null;
   private readonly requestTimeout: number;
@@ -44,6 +46,12 @@ export class MCPServerImplementation implements MCPServer {
   constructor() {
     this.maxConcurrentRequests = 50;  // Default, overridden by config
     this.requestTimeout = 30000;       // Default, overridden by config
+    this.logger = new Logger({
+      metadata: {
+        className: 'MCPServerImplementation',
+        serviceName: 'MCP Server',
+      },
+    });
   }
 
   /**
@@ -188,12 +196,16 @@ export class MCPServerImplementation implements MCPServer {
 
     // Log results after loop completes
     if (results.created.length > 0) {
-       
-      console.warn(`Created indexes: ${results.created.join(', ')}`);
+      this.logger.info({
+        message: 'Created payload indexes',
+        context: { createdIndexes: results.created },
+      });
     }
     if (results.existing.length > 0) {
-       
-      console.warn(`Indexes already exist: ${results.existing.join(', ')}`);
+      this.logger.debug({
+        message: 'Payload indexes already exist',
+        context: { existingIndexes: results.existing },
+      });
     }
   }
 
@@ -207,17 +219,25 @@ export class MCPServerImplementation implements MCPServer {
 
     try {
       // Try to create collection (will fail if it already exists)
+      const dimensions = 768; // nomic-embed-text dimensions
+      const collectionName = 'conversation-history';
+
       await this.qdrantClient.createCollection({
-        dimensions: 768, // nomic-embed-text dimensions
-        name: 'conversation-history',
+        dimensions,
+        name: collectionName,
       });
 
-       
-      console.warn('Created Qdrant collection: conversation-history');
+      this.logger.info({
+        message: 'Created Qdrant collection',
+        context: { collection: collectionName, dimensions },
+      });
     } catch {
       // Collection likely already exists
-       
-      console.warn('Qdrant collection already exists: conversation-history');
+      const collectionName = 'conversation-history';
+      this.logger.debug({
+        message: 'Qdrant collection already exists',
+        context: { collection: collectionName },
+      });
     }
 
     // Create payload indexes for efficient filtering
@@ -291,14 +311,18 @@ export class MCPServerImplementation implements MCPServer {
     }
 
     const qdrantUrl = config.qdrantUrl ?? 'http://qdrant:6333';
-    const toolCount = String(this.contextToolRegistry.getToolDefinitions().length);
+    const toolCount = this.contextToolRegistry.getToolDefinitions().length;
 
-    console.warn('MCP Server started successfully');
-    console.warn(`- Qdrant URL: ${qdrantUrl}`);
-    console.warn('- Collection: conversation-history');
-    console.warn(`- Registered tools: ${toolCount}`);
-    console.warn(`- Max concurrent requests: ${String(this.maxConcurrentRequests)}`);
-    console.warn(`- Request timeout: ${String(this.requestTimeout)}ms`);
+    this.logger.info({
+      message: 'MCP Server started successfully',
+      context: {
+        collection: 'conversation-history',
+        maxConcurrentRequests: this.maxConcurrentRequests,
+        qdrantUrl,
+        registeredTools: toolCount,
+        requestTimeout: this.requestTimeout,
+      },
+    });
   }
 
   /**

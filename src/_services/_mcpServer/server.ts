@@ -4,7 +4,15 @@
  * Initializes and starts the MCP server based on environment configuration.
  */
 
+import { Logger } from '../../_shared/_infrastructure';
 import { MCPServer } from './MCPServer';
+
+// Initialize logger for server module
+const logger = new Logger({
+  metadata: {
+    serviceName: 'MCP Server',
+  },
+});
 
 /**
  * Read configuration from environment variables
@@ -53,26 +61,31 @@ function readConfig(): {
 async function main(): Promise<void> {
   const config = readConfig();
 
-  console.error('[MCP Server] Starting with configuration:');
-  console.error(`- Transport: ${config.transport}`);
-  if (config.transport === 'streamable-http') {
-    console.error(`- HTTP Port: ${String(config.httpPort)}`);
-  }
-  console.error(`- Qdrant URL: ${config.qdrantUrl}`);
-  console.error(`- Agent Orchestrator URL: ${config.agentOrchestratorURL}`);
+  logger.info({
+    message: 'Starting with configuration',
+    context: {
+      agentOrchestratorURL: config.agentOrchestratorURL,
+      httpPort: config.transport === 'streamable-http' ? config.httpPort : undefined,
+      qdrantUrl: config.qdrantUrl,
+      transport: config.transport,
+    },
+  });
 
   // Create server instance
   const server = new MCPServer();
 
   // Setup graceful shutdown
   const shutdown = async (): Promise<void> => {
-    console.error('[MCP Server] Shutting down...');
+    logger.info({ message: 'Shutting down' });
     try {
       await server.stop();
-      console.error('[MCP Server] Shutdown complete');
+      logger.info({ message: 'Shutdown complete' });
       process.exit(0);
     } catch (error) {
-      console.error('[MCP Server] Error during shutdown:', error);
+      logger.error({
+        message: 'Error during shutdown',
+        error: error instanceof Error ? error : new Error(String(error)),
+      });
       process.exit(1);
     }
   };
@@ -96,9 +109,12 @@ async function main(): Promise<void> {
 
     await server.start(serverConfig);
 
-    console.error('[MCP Server] Server started successfully');
+    logger.info({ message: 'Server started successfully' });
   } catch (error) {
-    console.error('[MCP Server] Failed to start:', error);
+    logger.error({
+      message: 'Failed to start',
+      error: error instanceof Error ? error : new Error(String(error)),
+    });
     process.exit(1);
   }
 }

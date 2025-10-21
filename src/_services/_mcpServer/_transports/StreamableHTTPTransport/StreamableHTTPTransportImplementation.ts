@@ -12,6 +12,8 @@ import type { Server } from 'node:http';
 
 import express from 'express';
 
+import { Logger } from '../../../../_shared/_infrastructure';
+
 /**
  * Streamable HTTP Transport Implementation
  *
@@ -38,6 +40,7 @@ export class StreamableHTTPTransportImplementation implements Transport {
   private app: Express | null = null;
   private readonly debug: boolean;
   private isRunning: boolean = false;
+  private readonly logger: Logger;
   private readonly path: string;
   private readonly port: number;
   private requestHandler: ((req: JSONRPCRequest) => Promise<JSONRPCResponse>) | null = null;
@@ -51,6 +54,12 @@ export class StreamableHTTPTransportImplementation implements Transport {
     this.port = config.port;
     this.path = config.path ?? '/mcp';
     this.debug = config.debug ?? false;
+    this.logger = new Logger({
+      metadata: {
+        className: 'StreamableHTTPTransportImplementation',
+        serviceName: 'HTTP Transport',
+      },
+    });
   }
 
   /**
@@ -134,7 +143,7 @@ export class StreamableHTTPTransportImplementation implements Transport {
     this.isRunning = false;
 
     if (this.debug) {
-      console.error('[HTTPTransport] Stopped');
+      this.logger.debug({ message: 'Stopped' });
     }
   }
 
@@ -145,7 +154,10 @@ export class StreamableHTTPTransportImplementation implements Transport {
     const { req, res } = params;
 
     if (this.debug) {
-      console.error('[HTTPTransport] Received request:', JSON.stringify(req.body));
+      this.logger.debug({
+        message: 'Received request',
+        context: { request: req.body },
+      });
     }
 
     try {
@@ -163,7 +175,10 @@ export class StreamableHTTPTransportImplementation implements Transport {
       res.json(response);
 
       if (this.debug) {
-        console.error('[HTTPTransport] Sent response:', JSON.stringify(response));
+        this.logger.debug({
+          message: 'Sent response',
+          context: { response },
+        });
       }
     } catch (error) {
       // Send JSON-RPC error response
@@ -180,7 +195,10 @@ export class StreamableHTTPTransportImplementation implements Transport {
       res.json(errorResponse);
 
       if (this.debug) {
-        console.error('[HTTPTransport] Error:', error);
+        this.logger.error({
+          message: 'Error processing request',
+          error: error instanceof Error ? error : new Error(String(error)),
+        });
       }
     }
   }
@@ -202,8 +220,13 @@ export class StreamableHTTPTransportImplementation implements Transport {
         this.isRunning = true;
 
         if (this.debug) {
-          console.error(`[HTTPTransport] Started on port ${String(this.port)}`);
-          console.error(`[HTTPTransport] Endpoint: POST ${this.path}`);
+          this.logger.debug({
+            message: 'Started HTTP transport',
+            context: {
+              endpoint: `POST ${this.path}`,
+              port: this.port,
+            },
+          });
         }
 
         resolve();
