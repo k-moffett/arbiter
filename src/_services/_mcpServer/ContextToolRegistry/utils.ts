@@ -23,11 +23,11 @@ import type {
  */
 export function buildQdrantFilters(params: {
   filters: ContextSearchFilters | undefined;
-  sessionId: string;
+  userId: string;
 }): QdrantFilters {
-  const { filters, sessionId } = params;
+  const { filters, userId } = params;
   const qdrantFilters: QdrantFilters = {
-    sessionId,
+    userId,
   };
 
   if (filters === undefined) {
@@ -41,6 +41,10 @@ export function buildQdrantFilters(params: {
 
   if (filters.requestId !== undefined) {
     qdrantFilters.requestId = filters.requestId;
+  }
+
+  if (filters.sessionId !== undefined) {
+    qdrantFilters.sessionId = filters.sessionId;
   }
 
   if (filters.userFeedback !== undefined) {
@@ -165,22 +169,24 @@ export async function handleVectorSearchContext(params: {
   qdrantClient: QdrantClientAdapter;
 }): Promise<VectorSearchContextResult> {
   const { params: toolParams, qdrantClient } = params;
-  const { filters, limit, sessionId } = toolParams as VectorSearchContextParams;
+  const { filters, limit, queryVector, userId } = toolParams as VectorSearchContextParams;
+
+  // Validate vector dimensions (768 for nomic-embed-text)
+  if (queryVector.length !== 768) {
+    throw new Error(
+      `Invalid query vector dimensions: expected 768, got ${String(queryVector.length)}`
+    );
+  }
 
   // Build Qdrant filters
-  const qdrantFilters = buildQdrantFilters({ filters, sessionId });
+  const qdrantFilters = buildQdrantFilters({ filters, userId });
 
-  // For semantic search, we need to generate an embedding for the query
-  // This will be handled by the MCP server which has access to the embedding service
-  // For now, we'll use a zero vector as placeholder
-  // TODO: Integrate with embedding service
-  const searchVector = createZeroVector();
-
+  // Use the provided query vector for semantic search
   const results = await qdrantClient.search({
     collection: 'conversation-history',
     filters: qdrantFilters,
     limit: limit ?? 10,
-    vector: searchVector,
+    vector: queryVector,
   });
 
   // Apply exclude filters

@@ -33,6 +33,7 @@ export interface OrchestratorClient {
     context?: Record<string, unknown>;
     query: string;
     sessionId: string;
+    userId: string;
   }): Promise<QueryResult>;
 }
 
@@ -97,6 +98,7 @@ export class AgentOrchestratorClientImplementation implements OrchestratorClient
     context?: Record<string, unknown>;
     query: string;
     sessionId: string;
+    userId: string;
   }): Promise<QueryResult> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
@@ -109,6 +111,7 @@ export class AgentOrchestratorClientImplementation implements OrchestratorClient
           context: params.context,
           query: params.query,
           sessionId: params.sessionId,
+          userId: params.userId,
         }),
         headers: {
           /* eslint-disable @typescript-eslint/naming-convention */

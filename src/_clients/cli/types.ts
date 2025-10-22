@@ -23,6 +23,8 @@ export interface CLIConfig {
   showStats?: boolean;
   /** Enable gradient colors for welcome banner (default: true) */
   useGradient?: boolean;
+  /** User ID (device-based identifier) */
+  userId: string;
   /** Welcome message (default: "Context-Aware AI Agent") */
   welcomeMessage?: string;
   /** Welcome title (default: "Arbiter CLI") */

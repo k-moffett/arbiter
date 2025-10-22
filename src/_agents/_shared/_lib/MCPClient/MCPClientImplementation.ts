@@ -172,15 +172,17 @@ export class MCPClientImplementation implements MCPClient {
   public async searchContext(params: {
     filters?: ContextSearchFilters;
     limit?: number;
-    query: string;
-    sessionId: string;
+    query?: string;
+    queryVector: number[];
+    userId: string;
   }): Promise<VectorSearchContextResult> {
     const response = await this.callTool<VectorSearchContextResult>({
       arguments: {
         filters: params.filters,
         limit: params.limit,
         query: params.query,
-        sessionId: params.sessionId,
+        queryVector: params.queryVector,
+        userId: params.userId,
       },
       name: 'vector_search_context',
     });

@@ -110,6 +110,35 @@ function createExpressApp(): Express {
 }
 
 /**
+ * Validate process query request
+ */
+function validateProcessQueryRequest(body: unknown): {
+  context?: Record<string, unknown>;
+  query: string;
+  sessionId: string;
+  userId: string;
+} | { error: string } {
+  const reqBody = body as {
+    context?: Record<string, unknown>;
+    query: string;
+    sessionId: string;
+    userId: string;
+  };
+
+  if (typeof reqBody.query !== 'string') {
+    return { error: 'Invalid request: query is required' };
+  }
+  if (typeof reqBody.sessionId !== 'string') {
+    return { error: 'Invalid request: sessionId is required' };
+  }
+  if (typeof reqBody.userId !== 'string') {
+    return { error: 'Invalid request: userId is required' };
+  }
+
+  return reqBody;
+}
+
+/**
  * Setup route handlers
  */
 function setupRoutes(params: { app: Express; orchestrator: AgentOrchestrator }): void {
@@ -132,31 +161,21 @@ function setupRoutes(params: { app: Express; orchestrator: AgentOrchestrator }):
   // Process query endpoint
   // eslint-disable-next-line local-rules/require-typed-params, @typescript-eslint/max-params
   app.post('/process-query', async (req: Request, res: Response) => {
-    let query: string | undefined;
-    let sessionId: string | undefined;
+    const validated = validateProcessQueryRequest(req.body);
+
+    if ('error' in validated) {
+      res.status(400).json({ error: validated.error });
+      return;
+    }
+
+    const { query, sessionId, userId, context } = validated;
 
     try {
-      const body = req.body as {
-        context?: Record<string, unknown>;
-        query: string;
-        sessionId: string;
-      };
-
-      query = body.query;
-      sessionId = body.sessionId;
-      const context = body.context;
-
-      if (typeof query !== 'string' || typeof sessionId !== 'string') {
-        res.status(400).json({
-          error: 'Invalid request: query and sessionId are required',
-        });
-        return;
-      }
-
       const result = await orchestrator.processQuery({
         ...(context !== undefined ? { context } : {}),
         query,
         sessionId,
+        userId,
       });
 
       res.json(result);
@@ -169,6 +188,7 @@ function setupRoutes(params: { app: Express; orchestrator: AgentOrchestrator }):
         context: {
           query,
           sessionId,
+          userId,
           stack: errorObj.stack,
         },
       });

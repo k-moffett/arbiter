@@ -95,5 +95,6 @@ export interface AgentOrchestrator {
     context?: Record<string, unknown>;
     query: string;
     sessionId: string;
+    userId: string;
   }): Promise<QueryResult>;
 }

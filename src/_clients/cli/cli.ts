@@ -7,6 +7,7 @@
 
 import { AgentOrchestratorClient } from '../../_agents/_orchestration/AgentOrchestratorClient';
 import { Logger } from '../../_shared/_infrastructure';
+import { getUserId } from '../../_shared/utils/getUserId';
 import { ChatService } from '../ChatService';
 import { CLIService } from './index';
 
@@ -28,6 +29,7 @@ async function main(): Promise<void> {
   const orchestratorTimeout = Number(process.env['AGENT_ORCHESTRATOR_TIMEOUT'] ?? '120000');
 
   const sessionId = `cli-session-${String(Date.now())}`;
+  const userId = getUserId();
 
   // Read CLI customization from environment
   // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
@@ -67,6 +69,7 @@ async function main(): Promise<void> {
     sessionId,
     showStats,
     useGradient,
+    userId,
     welcomeMessage,
     welcomeTitle,
   });

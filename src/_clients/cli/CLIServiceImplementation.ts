@@ -46,12 +46,14 @@ export class CLIServiceImplementation implements CLIService {
   private showStats: boolean;
   private spinner: Spinner | null = null;
   private totalResponseTime: number = 0;
+  private readonly userId: string;
   private readonly welcomeMessage: string;
   private readonly welcomeTitle: string;
 
   constructor(params: { chatService: ChatService } & CLIConfig) {
     this.chatService = params.chatService;
     this.sessionId = params.sessionId;
+    this.userId = params.userId;
     this.debugMode = params.debug ?? false;
     this.welcomeTitle = params.welcomeTitle ?? 'Arbiter CLI';
     this.welcomeMessage = params.welcomeMessage ?? 'Context-Aware AI Agent';
@@ -83,8 +85,11 @@ export class CLIServiceImplementation implements CLIService {
       prompt: '> ',
     });
 
-    // Initialize session
-    this.chatService.createSession({ sessionId: this.sessionId });
+    // Initialize session with userId in metadata
+    this.chatService.createSession({
+      sessionId: this.sessionId,
+      metadata: { userId: this.userId }
+    });
 
     // Display welcome message
     this.displayWelcome();

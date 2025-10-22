@@ -69,8 +69,9 @@ export interface MCPClient {
   searchContext(params: {
     filters?: ContextSearchFilters;
     limit?: number;
-    query: string;
-    sessionId: string;
+    query?: string;
+    queryVector: number[];
+    userId: string;
   }): Promise<VectorSearchContextResult>;
 
   /**

@@ -22,6 +22,7 @@ interface Orchestrator {
     context?: Record<string, unknown>;
     query: string;
     sessionId: string;
+    userId: string;
   }): Promise<{
     agentsUsed: number;
     answer: string;
@@ -145,10 +146,18 @@ export class ChatServiceImplementation implements ChatService {
     // Add user message to session
     this.addMessageToSession({ message: userMessage, session });
 
+    // Extract userId from session metadata
+    // eslint-disable-next-line local-rules/no-bracket-notation -- metadata is an index signature
+    const userId = session.metadata['userId'];
+    if (typeof userId !== 'string') {
+      throw new Error('userId not found in session metadata');
+    }
+
     // Process query via orchestrator
     const result = await this.orchestrator.processQuery({
       query: params.message,
       sessionId: params.sessionId,
+      userId,
     });
 
     // Create bot message

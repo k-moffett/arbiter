@@ -80,10 +80,12 @@ export interface VectorSearchContextParams {
   filters?: ContextSearchFilters;
   /** Maximum number of results */
   limit?: number;
-  /** Search query text */
-  query: string;
-  /** Session ID to search within */
-  sessionId: string;
+  /** Search query text (optional, for logging/debugging) */
+  query?: string;
+  /** Query embedding vector (768-dimensional) */
+  queryVector: number[];
+  /** User ID to search within */
+  userId: string;
 }
 
 /**
@@ -98,6 +100,8 @@ export interface ContextSearchFilters {
   excludeTags?: string[];
   /** Only include messages from this request */
   requestId?: string;
+  /** Filter by session ID (optional) */
+  sessionId?: string;
   /** Include specific tags (AND logic) */
   tags?: string[];
   /** Filter by user feedback */
@@ -161,9 +165,10 @@ export interface QdrantFilters {
   [key: string]: unknown;
   agentType?: string;
   requestId?: string;
-  sessionId: string;
+  sessionId?: string;
   tags?: string[];
   userFeedback?: string;
+  userId: string;
 }
 
 /**

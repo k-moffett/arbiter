@@ -17,6 +17,8 @@ import type { QueryResult } from './types';
 
 import { randomUUID } from 'node:crypto';
 
+import { Logger } from '../../../_shared/_infrastructure';
+
 /**
  * Agent Orchestrator Configuration
  */
@@ -59,6 +61,7 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
   private readonly embeddingModel: string;
   private readonly isRunning: boolean = true;
   private readonly llmModel: string;
+  private readonly logger: Logger;
   private readonly mcpClient: MCPClient;
   private readonly ollamaProvider: AgentOrchestratorConfig['ollamaProvider'];
   private requestCounter: number = 0;
@@ -70,6 +73,12 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
     this.llmModel = config.llmModel;
     this.embeddingModel = config.embeddingModel ?? 'nomic-embed-text';
     this.startTime = Date.now();
+    this.logger = new Logger({
+      metadata: {
+        className: 'AgentOrchestratorImplementation',
+        serviceName: 'Agent Orchestrator',
+      },
+    });
   }
 
   /**
@@ -95,6 +104,7 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
     context?: Record<string, unknown>;
     query: string;
     sessionId: string;
+    userId: string;
   }): Promise<QueryResult> {
     const startTime = Date.now();
 
@@ -111,7 +121,16 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
     // Step 2: Search for relevant context
     const contextResults = await this.searchRelevantContext({
       queryEmbedding,
-      sessionId: params.sessionId,
+      userId: params.userId,
+    });
+
+    this.logger.info({
+      message: 'Context search completed',
+      context: {
+        foundResults: contextResults.length,
+        userId: params.userId,
+        query: params.query,
+      },
     });
 
     // Step 3: Build prompt with context
@@ -136,6 +155,7 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
       rootRequestId,
       role: 'user',
       sessionId: params.sessionId,
+      userId: params.userId,
     });
 
     // Step 6: Store agent response
@@ -146,6 +166,7 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
       rootRequestId,
       role: 'bot',
       sessionId: params.sessionId,
+      userId: params.userId,
     });
 
     const duration = Date.now() - startTime;
@@ -180,9 +201,14 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
   }): string {
     let prompt = '';
 
+    // Add system instruction
+    prompt += 'You are a helpful AI assistant. ';
+
     // Add context if available
     if (params.context.length > 0) {
-      prompt += 'Relevant conversation history:\n\n';
+      prompt +=
+        'Below is relevant conversation history for context. Use it ONLY if relevant to the current question. If the current question is about a new topic, answer it directly without referencing unrelated history.\n\n';
+      prompt += 'Previous conversation:\n';
       for (const ctx of params.context) {
         const role = ctx.payload.role === 'user' ? 'User' : 'Assistant';
         prompt += `${role}: ${ctx.payload.content}\n`;
@@ -190,8 +216,8 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
       prompt += '\n---\n\n';
     }
 
-    // Add current query
-    prompt += `User: ${params.query}\n`;
+    // Add current query with emphasis
+    prompt += `Current question: ${params.query}\n`;
     prompt += 'Assistant:';
 
     return prompt;
@@ -207,30 +233,55 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
   }
 
   /**
-   * Search for relevant context using dual strategy
+   * Search for relevant context using hybrid strategy
    */
   private async searchRelevantContext(params: {
     queryEmbedding: number[];
-    sessionId: string;
+    userId: string;
   }): Promise<ContextSearchResult[]> {
-    // Dual context strategy:
-    // 1. Recent messages (last 10)
-    // 2. Semantic search (top 5 relevant)
+    // Hybrid context strategy:
+    // Combines recent messages with semantically relevant ones
+    // This ensures temporal queries like "last time" work correctly
 
     try {
-      // For MVP, just do semantic search
-      // Future: combine with recent messages query and use queryEmbedding
-      const searchResult = await this.mcpClient.searchContext({
-        limit: 10,
-        query: '', // Placeholder - MCPClient should use embedding
-        sessionId: params.sessionId,
+      // Get semantic search results (top 10 by similarity)
+      const semanticResults = await this.mcpClient.searchContext({
+        limit: 20,
+        queryVector: params.queryEmbedding,
+        userId: params.userId,
       });
 
-      // Ensure results is always an array
-      return Array.isArray(searchResult.results) ? searchResult.results : [];
-    } catch {
-      // If context search fails (e.g., empty database), return empty array
-      // This allows the query to proceed without historical context
+      const results = Array.isArray(semanticResults.results) ? semanticResults.results : [];
+
+      // Sort by timestamp descending (most recent first)
+      const sortedByTime = [...results].sort(
+        (a, b) => b.payload.timestamp - a.payload.timestamp
+      );
+
+      // Take top 10: mix of recent and semantically relevant
+      // Weight: 60% recent (first 6), 40% semantic (last 4)
+      const recentResults = sortedByTime.slice(0, 6);
+      const semanticOnlyResults = results.slice(0, 4);
+
+      // Merge and deduplicate
+      const merged = [...recentResults];
+      for (const semantic of semanticOnlyResults) {
+        if (!merged.some((r) => r.id === semantic.id)) {
+          merged.push(semantic);
+        }
+      }
+
+      // Final sort by timestamp for chronological context
+      return merged.sort((a, b) => a.payload.timestamp - b.payload.timestamp);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      this.logger.warn({
+        message: `Context search failed: ${errorMessage}`,
+        context: {
+          userId: params.userId,
+          vectorLength: params.queryEmbedding.length,
+        },
+      });
       return [];
     }
   }
@@ -245,6 +296,7 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
     role: 'bot' | 'user';
     rootRequestId: string;
     sessionId: string;
+    userId: string;
   }): Promise<void> {
     // Generate embedding for message
     const embedding = await this.ollamaProvider.embed({
@@ -266,7 +318,7 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
       sessionId: params.sessionId,
       tags: ['conversation'],
       timestamp: Date.now(),
-      userId: 'default-user', // MVP: no user tracking yet
+      userId: params.userId,
     };
 
     // Store via MCP client

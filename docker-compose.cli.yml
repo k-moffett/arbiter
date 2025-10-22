@@ -53,6 +53,9 @@ services:
       - CLI_FORCE_COLOR=${CLI_FORCE_COLOR:-false}
       - CLI_TERMINAL_WIDTH=${CLI_TERMINAL_WIDTH}
       - CLI_ASCII_ONLY=${CLI_ASCII_ONLY:-false}
+    volumes:
+      # Persist user ID across container restarts
+      - arbiter-cli-data:/app/.arbiter
     networks:
       - arbiter-network
     deploy:
@@ -63,6 +66,10 @@ services:
         reservations:
           cpus: '0.5'
           memory: 256M
+
+volumes:
+  arbiter-cli-data:
+    driver: local
 
 # Usage:
 # docker compose -f docker-compose.cli.yml run --rm cli

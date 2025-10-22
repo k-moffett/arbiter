@@ -19,7 +19,8 @@
   ],
   "scripts": {
     "// Development": "=== Development Scripts ===",
-    "dev": "tsx watch src/index.ts",
+    "dev": "npm run start:all",
+    "dev:local": "tsx watch src/index.ts",
     "dev:docker": "docker compose up --build",
     "dev:stop": "docker compose down",
     "dev:logs": "docker compose logs -f",
