@@ -33,15 +33,7 @@ services:
     environment:
       - QDRANT__SERVICE__HTTP_PORT=6333
       - QDRANT__SERVICE__GRPC_PORT=6334
-      # Production optimizations
-      - QDRANT__STORAGE__OPTIMIZERS__MEMMAP_THRESHOLD=20000
-      - QDRANT__STORAGE__OPTIMIZERS__INDEXING_THRESHOLD=20000
-    healthcheck:
-      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/localhost/6333 && echo -e 'GET /health HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
+      - QDRANT__LOG_LEVEL=INFO
     networks:
       - arbiter-network
     deploy:
@@ -83,12 +75,6 @@ services:
       options:
         tag: "ollama"
         labels: "service"
-    healthcheck:
-      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/localhost/11434 && echo -e 'GET /api/version HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 45s
     networks:
       - arbiter-network
     deploy:
@@ -103,7 +89,9 @@ services:
           memory: 8G  # Leave headroom for vLLM
 
   # ===========================================================================
-  # vLLM - Primary LLM Server (Phi-4 14B)
+  # vLLM - Primary LLM Server (Phi-4 14B) - OPTIONAL
+  # Currently using Ollama for both LLM and embeddings
+  # To enable: docker compose -f docker-compose.services.yml --profile vllm up -d
   # ===========================================================================
   vllm:
     image: vllm/vllm-openai:latest
@@ -118,21 +106,16 @@ services:
       --model microsoft/phi-4
       --gpu-memory-utilization 0.75
       --max-model-len 8192
-      --quantization awq
       --dtype auto
       --trust-remote-code
     environment:
       - CUDA_VISIBLE_DEVICES=0
       - VLLM_WORKER_MULTIPROC_METHOD=spawn
       - HF_HOME=/root/.cache/huggingface
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 120s  # Model loading takes time on first start
     networks:
       - arbiter-network
+    profiles:
+      - vllm  # Only start with --profile vllm
     deploy:
       resources:
         reservations:
@@ -152,7 +135,7 @@ services:
     container_name: arbiter-ollama-init
     depends_on:
       ollama:
-        condition: service_healthy
+        condition: service_started
     volumes:
       - ollama_models:/root/.ollama
     environment:
@@ -181,7 +164,7 @@ services:
     container_name: arbiter-qdrant-ui
     depends_on:
       qdrant:
-        condition: service_healthy
+        condition: service_started
     ports:
       - "3000:3000"
     environment:

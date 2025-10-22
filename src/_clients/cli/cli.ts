@@ -5,9 +5,7 @@
  * Connects AgentOrchestrator, ChatService, and CLIService.
  */
 
-import { AgentOrchestrator } from '../../_agents/_orchestration/AgentOrchestrator';
-import { MCPClient } from '../../_agents/_shared/_lib/MCPClient';
-import { OllamaProvider } from '../../_agents/_shared/_lib/OllamaProvider';
+import { AgentOrchestratorClient } from '../../_agents/_orchestration/AgentOrchestratorClient';
 import { Logger } from '../../_shared/_infrastructure';
 import { ChatService } from '../ChatService';
 import { CLIService } from './index';
@@ -24,43 +22,22 @@ const logger = new Logger({
 async function main(): Promise<void> {
   // Read configuration from environment
   // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
-  const ollamaBaseUrl = process.env['OLLAMA_BASE_URL'] ?? 'http://localhost:11434';
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
-  const mcpServerUrl = process.env['MCP_SERVER_URL'] ?? 'http://localhost:3100';
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
-  const llmModel = process.env['LLM_MODEL'] ?? 'llama3.1:8b';
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
-  const embeddingModel = process.env['EMBEDDING_MODEL'] ?? 'nomic-embed-text';
+  const orchestratorUrl =
+    process.env['AGENT_ORCHESTRATOR_URL'] ?? 'http://agent-orchestrator:3200';
 
   const sessionId = `cli-session-${String(Date.now())}`;
 
   logger.info({
     message: 'Initializing CLI',
     context: {
-      embeddingModel,
-      llmModel,
-      mcpServerUrl,
-      ollamaBaseUrl,
+      orchestratorUrl,
       sessionId,
     },
   });
 
-  // Initialize Ollama provider
-  const ollamaProvider = new OllamaProvider({
-    baseUrl: ollamaBaseUrl,
-    embeddingModel,
-    model: llmModel,
-  });
-
-  // Initialize MCP client
-  const mcpClient = new MCPClient({ baseUrl: mcpServerUrl });
-
-  // Initialize Agent Orchestrator
-  const orchestrator = new AgentOrchestrator({
-    embeddingModel,
-    llmModel,
-    mcpClient,
-    ollamaProvider,
+  // Initialize Orchestrator Client
+  const orchestrator = new AgentOrchestratorClient({
+    baseUrl: orchestratorUrl,
   });
 
   // Initialize Chat Service

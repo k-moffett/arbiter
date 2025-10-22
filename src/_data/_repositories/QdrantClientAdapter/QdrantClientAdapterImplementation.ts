@@ -40,7 +40,8 @@ export class QdrantClientAdapter implements VectorRepository {
   private readonly collection: string;
 
   constructor(config: QdrantClientConfig) {
-    const clientConfig: { apiKey?: string; url: string } = {
+    const clientConfig: { apiKey?: string; checkCompatibility?: boolean; url: string } = {
+      checkCompatibility: false, // Skip version check between client and server
       url: config.url,
     };
 
@@ -145,21 +146,48 @@ export class QdrantClientAdapter implements VectorRepository {
 
   /**
    * Upsert vector documents
+   *
+   * Uses UUID strings as IDs (recommended by Qdrant).
+   * Qdrant stores UUIDs as 128-bit integers internally for efficiency.
    */
   public async upsert(documents: VectorDocument[]): Promise<void> {
-    const points: QdrantPoint[] = documents.map((doc) => ({
-      id: doc.id,
-      payload: {
+    const points = documents.map((doc) => {
+      // Sanitize payload to ensure only primitive types
+      const sanitizedPayload = this.sanitizePayload({
         content: doc.content,
         ...doc.metadata,
-      },
-      vector: doc.vector,
-    }));
+      });
 
-    await this.client.upsert(this.collection, {
-      points,
-      wait: true,
+      return {
+        id: doc.id, // Pass UUID string directly - Qdrant handles conversion
+        payload: sanitizedPayload,
+        vector: doc.vector,
+      };
     });
+
+    // Debug logging
+    console.log('[DEBUG] Qdrant upsert request:', {
+      collection: this.collection,
+      pointCount: points.length,
+      firstPointId: points[0]?.id,
+      firstVectorLength: points[0]?.vector?.length,
+      payloadKeys: points[0] ? Object.keys(points[0].payload) : [],
+    });
+
+    try {
+      await this.client.upsert(this.collection, {
+        points,
+        wait: true,
+      });
+    } catch (error) {
+      console.error('[ERROR] Qdrant upsert failed:', {
+        error: error instanceof Error ? error.message : String(error),
+        errorObj: error,
+        collection: this.collection,
+        pointCount: points.length,
+      });
+      throw error;
+    }
   }
 
   /**
@@ -249,5 +277,54 @@ export class QdrantClientAdapter implements VectorRepository {
 
     // For objects, return empty string (shouldn't happen with proper data)
     return '';
+  }
+
+  /**
+   * Sanitize payload for Qdrant by ensuring only primitive values
+   * Complex objects are converted to JSON strings
+   */
+  private sanitizePayload(payload: Record<string, unknown>): Record<string, unknown> {
+    const sanitized: Record<string, unknown> = {};
+
+    for (const [key, value] of Object.entries(payload)) {
+      if (value === null || value === undefined) {
+        continue; // Skip null/undefined
+      }
+
+      // Primitives are supported directly
+      if (
+        typeof value === 'string' ||
+        typeof value === 'number' ||
+        typeof value === 'boolean'
+      ) {
+        sanitized[key] = value;
+      }
+      // Arrays of primitives
+      else if (
+        Array.isArray(value) &&
+        value.every((v) => typeof v === 'string' || typeof v === 'number')
+      ) {
+        sanitized[key] = value;
+      }
+      // Dates to ISO strings
+      else if (value instanceof Date) {
+        sanitized[key] = value.toISOString();
+      }
+      // Complex objects to JSON strings
+      else if (typeof value === 'object') {
+        try {
+          sanitized[key] = JSON.stringify(value);
+        } catch {
+          // Skip if can't serialize
+          continue;
+        }
+      }
+      // Fallback: convert to string
+      else {
+        sanitized[key] = String(value);
+      }
+    }
+
+    return sanitized;
   }
 }

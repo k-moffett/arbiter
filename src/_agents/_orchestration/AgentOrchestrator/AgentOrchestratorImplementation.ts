@@ -6,6 +6,8 @@
  * Future versions will support query decomposition and Docker agent spawning.
  */
 
+import { randomUUID } from 'node:crypto';
+
 import type {
   ContextPayload,
   ContextSearchResult,
@@ -215,15 +217,22 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
     // 1. Recent messages (last 10)
     // 2. Semantic search (top 5 relevant)
 
-    // For MVP, just do semantic search
-    // Future: combine with recent messages query and use queryEmbedding
-    const searchResult = await this.mcpClient.searchContext({
-      limit: 10,
-      query: '', // Placeholder - MCPClient should use embedding
-      sessionId: params.sessionId,
-    });
+    try {
+      // For MVP, just do semantic search
+      // Future: combine with recent messages query and use queryEmbedding
+      const searchResult = await this.mcpClient.searchContext({
+        limit: 10,
+        query: '', // Placeholder - MCPClient should use embedding
+        sessionId: params.sessionId,
+      });
 
-    return searchResult.results;
+      // Ensure results is always an array
+      return Array.isArray(searchResult.results) ? searchResult.results : [];
+    } catch (error) {
+      // If context search fails (e.g., empty database), return empty array
+      // This allows the query to proceed without historical context
+      return [];
+    }
   }
 
   /**
@@ -243,8 +252,8 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
       text: params.content,
     });
 
-    // Generate unique message ID
-    const messageId = `msg_${String(Date.now())}_${String(Math.random()).slice(2, 8)}`;
+    // Generate UUID for message ID (recommended by Qdrant for efficient storage)
+    const messageId = randomUUID();
 
     // Build payload
     const payload: ContextPayload = {

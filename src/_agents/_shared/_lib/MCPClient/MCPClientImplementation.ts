@@ -55,11 +55,19 @@ export class MCPClientImplementation implements MCPClient {
     }, this.timeout);
 
     try {
-      const response = await fetch(`${this.baseUrl}/tools/call`, {
-        body: JSON.stringify({
+      // MCP server uses JSON-RPC protocol at /mcp endpoint
+      const jsonrpcRequest = {
+        id: Date.now(),
+        jsonrpc: '2.0',
+        method: 'tools/call',
+        params: {
           arguments: request.arguments,
           name: request.name,
-        }),
+        },
+      };
+
+      const response = await fetch(`${this.baseUrl}/mcp`, {
+        body: JSON.stringify(jsonrpcRequest),
         headers: {
           /* eslint-disable @typescript-eslint/naming-convention */
           'Content-Type': 'application/json',
@@ -77,8 +85,46 @@ export class MCPClientImplementation implements MCPClient {
         };
       }
 
-      const data = (await response.json()) as MCPToolCallResponse<T>;
-      return data;
+      // Parse JSON-RPC response
+      const jsonrpcResponse = (await response.json()) as {
+        id: number;
+        jsonrpc: string;
+        result?: { content: Array<{ text: string; type: string }>; isError?: boolean };
+        error?: { code: number; data?: unknown; message: string };
+      };
+
+      // Check for JSON-RPC error
+      if (jsonrpcResponse.error !== undefined) {
+        return {
+          error: jsonrpcResponse.error.message,
+          success: false,
+        };
+      }
+
+      // Check for tool execution error
+      if (jsonrpcResponse.result?.isError === true) {
+        const errorContent = jsonrpcResponse.result.content[0];
+        return {
+          error: errorContent?.text ?? 'Tool execution failed',
+          success: false,
+        };
+      }
+
+      // Extract result from JSON-RPC response
+      const resultContent = jsonrpcResponse.result?.content[0];
+      if (resultContent === undefined || resultContent.type !== 'text') {
+        return {
+          error: 'Invalid tool response format',
+          success: false,
+        };
+      }
+
+      // Parse the text content as JSON
+      const toolResult = JSON.parse(resultContent.text) as T;
+      return {
+        result: toolResult,
+        success: true,
+      };
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         return {

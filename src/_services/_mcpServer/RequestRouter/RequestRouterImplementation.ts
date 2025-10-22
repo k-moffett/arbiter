@@ -60,7 +60,27 @@ export class RequestRouterImplementation implements RequestRouter {
   public async route(params: RouteParams): Promise<JSONRPCResponse> {
     const { request } = params;
 
+    // Debug logging
+    console.log('[DEBUG] RequestRouter.route received:', {
+      hasMethod: request.method !== undefined,
+      method: request.method,
+      hasParams: request.params !== undefined,
+      requestKeys: Object.keys(request),
+    });
+
     try {
+      // Validate request has method field
+      if (request.method === undefined || typeof request.method !== 'string') {
+        return {
+          error: {
+            code: -32600,
+            message: 'Invalid Request: missing or invalid method field',
+          },
+          id: request.id ?? 0,
+          jsonrpc: '2.0',
+        };
+      }
+
       // Handle tools/call method
       if (request.method === 'tools/call') {
         return await this.handleToolCall(request);
@@ -187,21 +207,33 @@ export class RequestRouterImplementation implements RequestRouter {
     try {
       const result = await handler(params.arguments);
 
+      // Return MCP protocol format
       return {
         id: request.id,
         jsonrpc: '2.0',
         result: {
-          result,
-          success: true,
+          content: [
+            {
+              text: JSON.stringify(result),
+              type: 'text',
+            },
+          ],
+          isError: false,
         },
       };
     } catch (error) {
+      // Return MCP protocol error format
       return {
         id: request.id,
         jsonrpc: '2.0',
         result: {
-          error: error instanceof Error ? error.message : String(error),
-          success: false,
+          content: [
+            {
+              text: error instanceof Error ? error.message : String(error),
+              type: 'text',
+            },
+          ],
+          isError: true,
         },
       };
     }

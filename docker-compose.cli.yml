@@ -23,6 +23,7 @@ services:
     tty: true         # Allocate pseudo-TTY for terminal
     environment:
       # Service URLs (Docker networking)
+      - AGENT_ORCHESTRATOR_URL=${AGENT_ORCHESTRATOR_URL:-http://agent-orchestrator:3200}
       - MCP_SERVER_URL=${MCP_SERVER_URL:-http://mcp-server:3100}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
 
@@ -39,8 +40,6 @@ services:
       - LOG_FORMAT=${LOG_FORMAT:-text}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - LOG_USE_COLORS=${LOG_USE_COLORS:-true}
-    depends_on:
-      - mcp-server
     networks:
       - arbiter-network
     deploy:

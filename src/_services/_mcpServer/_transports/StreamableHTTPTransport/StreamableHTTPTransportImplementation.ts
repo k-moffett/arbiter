@@ -92,8 +92,8 @@ export class StreamableHTTPTransportImplementation implements Transport {
 
     this.app = express();
 
-    // Middleware
-    this.app.use(express.json());
+    // Middleware - Large limit for self-hosted service (handles multiple embeddings + large payloads)
+    this.app.use(express.json({ limit: '50mb' }));
 
     // CORS headers for cross-origin requests
     // eslint-disable-next-line local-rules/require-typed-params, @typescript-eslint/max-params

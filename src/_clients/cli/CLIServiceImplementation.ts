@@ -100,7 +100,7 @@ export class CLIServiceImplementation implements CLIService {
     }
 
     this.isRunning = false;
-    this.logger.info({ message: 'Goodbye! 👋' });
+    console.log('\nGoodbye! 👋\n');
     process.exit(0);
   }
 
@@ -116,7 +116,7 @@ Available commands:
   /debug    - Toggle debug mode
   /exit     - Exit the chat
 `;
-    this.logger.info({ message: helpText });
+    console.log(helpText);
   }
 
   /**
@@ -126,7 +126,7 @@ Available commands:
     const history = this.chatService.getHistory({ sessionId: this.sessionId });
 
     if (history.length === 0) {
-      this.logger.info({ message: 'No conversation history yet.' });
+      console.log('No conversation history yet.');
       return;
     }
 
@@ -140,7 +140,7 @@ Available commands:
 
     lines.push('─'.repeat(50), '');
 
-    this.logger.info({ message: lines.join('\n') });
+    console.log(lines.join('\n'));
   }
 
   /**
@@ -158,7 +158,7 @@ Available commands:
       '',
     ].join('\n');
 
-    this.logger.info({ message });
+    console.log(message);
   }
 
   /**
@@ -186,7 +186,7 @@ Available commands:
         '/clear',
         () => {
           this.chatService.clearHistory({ sessionId: this.sessionId });
-          this.logger.info({ message: 'Conversation history cleared.' });
+          console.log('Conversation history cleared.');
           return { continue: true };
         },
       ],
@@ -195,7 +195,7 @@ Available commands:
         () => {
           this.debugMode = !this.debugMode;
           const status = this.debugMode ? 'enabled' : 'disabled';
-          this.logger.info({ message: `Debug mode ${status}.` });
+          console.log(`Debug mode ${status}.`);
           return { continue: true };
         },
       ],
@@ -219,7 +219,7 @@ Available commands:
     const handler = commandHandlers.get(command);
 
     if (handler === undefined) {
-      this.logger.info({ message: 'Unknown command. Type /help for available commands.' });
+      console.log('Unknown command. Type /help for available commands.');
       return { continue: true };
     }
 
@@ -262,14 +262,18 @@ Available commands:
         sessionId: this.sessionId,
       });
 
-      this.logger.info({
-        message: this.formatResponse({
+      // Output agent response to user
+      console.log(
+        this.formatResponse({
           duration: result.duration,
           message: result.botMessage,
-        }),
-      });
+        })
+      );
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`\nError: ${errorMessage}\n`);
+
+      // Still log to logger for debugging
       this.logger.error({
         error: error instanceof Error ? error : new Error(errorMessage),
         message: 'Error processing message',

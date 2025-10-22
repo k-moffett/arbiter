@@ -1,0 +1,61 @@
+# Docker Compose - Agent Orchestrator Service
+# Central orchestration service for processing queries with context awareness
+
+version: '3.8'
+
+networks:
+  arbiter-network:
+    driver: bridge
+    name: arbiter-network
+
+services:
+  # ===========================================================================
+  # Agent Orchestrator Service
+  # ===========================================================================
+  agent-orchestrator:
+    build:
+      context: .
+      dockerfile: docker/services/Dockerfile.orchestrator
+      target: production
+    container_name: arbiter-agent-orchestrator
+    restart: unless-stopped  # Persist - core service
+    ports:
+      - "3200:3200"  # HTTP API
+    environment:
+      # Service URLs (Docker networking)
+      - MCP_SERVER_URL=${MCP_SERVER_URL:-http://mcp-server:3100}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+
+      # Model configuration
+      - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+
+      # Server configuration
+      - ORCHESTRATOR_PORT=${ORCHESTRATOR_PORT:-3200}
+
+      # Node.js settings
+      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=2048}
+
+      # Logging configuration
+      - LOG_PREFIX=${LOG_PREFIX:-[ARBITER]}
+      - LOG_FORMAT=${LOG_FORMAT:-text}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_USE_COLORS=${LOG_USE_COLORS:-true}
+    networks:
+      arbiter-network:
+        aliases:
+          - agent-orchestrator  # DNS alias for CLI connectivity
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -5,7 +5,6 @@
  * Maintains in-memory message history for recent context.
  */
 
-import type { AgentOrchestrator } from '../../_agents/_orchestration/AgentOrchestrator';
 import type { ChatService } from './interfaces';
 import type {
   ChatMessage,
@@ -14,6 +13,29 @@ import type {
   SendMessageParams,
   SendMessageResult,
 } from './types';
+
+/**
+ * Orchestrator interface (works with both HTTP client and in-process)
+ */
+interface Orchestrator {
+  processQuery(params: {
+    context?: Record<string, unknown>;
+    query: string;
+    sessionId: string;
+  }): Promise<{
+    agentsUsed: number;
+    answer: string;
+    confidence: number;
+    sources: Array<{
+      content: string;
+      id: string;
+      metadata: Record<string, unknown>;
+      score: number;
+    }>;
+    totalCost: number;
+    totalDuration: number;
+  }>;
+}
 
 /**
  * ChatService Implementation
@@ -34,10 +56,10 @@ import type {
  */
 export class ChatServiceImplementation implements ChatService {
   private readonly maxMessagesInMemory: number;
-  private readonly orchestrator: AgentOrchestrator;
+  private readonly orchestrator: Orchestrator;
   private readonly sessions: Map<string, ChatSession>;
 
-  constructor(params: { orchestrator: AgentOrchestrator } & ChatServiceConfig) {
+  constructor(params: { orchestrator: Orchestrator } & ChatServiceConfig) {
     this.orchestrator = params.orchestrator;
     this.maxMessagesInMemory = params.maxMessagesInMemory ?? 10;
     this.sessions = new Map();

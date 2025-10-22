@@ -117,6 +117,15 @@ export async function handleVectorUpsertContext(params: {
   const { messageId, parentRequestId, payload, requestId, rootRequestId, vector } =
     toolParams as VectorUpsertContextParams;
 
+  // Debug logging
+  console.log('[DEBUG] vector_upsert_context received:', {
+    hasVector: vector !== undefined,
+    isArray: Array.isArray(vector),
+    length: Array.isArray(vector) ? vector.length : 'not an array',
+    messageId,
+    payloadKeys: Object.keys(payload),
+  });
+
   // Validate vector dimensions (768 for nomic-embed-text)
   if (vector.length !== 768) {
     throw new Error(`Invalid vector dimensions: expected 768, got ${String(vector.length)}`);

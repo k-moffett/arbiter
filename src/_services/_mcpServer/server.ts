@@ -4,8 +4,8 @@
  * Initializes and starts the MCP server based on environment configuration.
  */
 
-import { Logger } from '../../_shared/_infrastructure';
-import { MCPServer } from './MCPServer';
+import { Logger } from '../../_shared/_infrastructure/index.js';
+import { MCPServer } from './MCPServer/index.js';
 
 // Initialize logger for server module
 const logger = new Logger({

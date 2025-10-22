@@ -31,15 +31,6 @@ services:
       - QDRANT__SERVICE__HTTP_PORT=6333
       - QDRANT__SERVICE__GRPC_PORT=6334
       - QDRANT__LOG_LEVEL=INFO
-      # Production optimizations
-      - QDRANT__STORAGE__OPTIMIZERS__MEMMAP_THRESHOLD=20000
-      - QDRANT__STORAGE__OPTIMIZERS__INDEXING_THRESHOLD=20000
-    healthcheck:
-      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/localhost/6333 && echo -e 'GET /health HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
     networks:
       - arbiter-network
     deploy:
@@ -92,13 +83,7 @@ services:
       - LOG_USE_COLORS=${LOG_USE_COLORS:-true}
     depends_on:
       qdrant:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "sh", "-c", "exec 3<>/dev/tcp/localhost/3100 && echo -e 'GET /health HTTP/1.1\\r\\nHost: localhost\\r\\n\\r\\n' >&3"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+        condition: service_started
     networks:
       - arbiter-network
     deploy:
