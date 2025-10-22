@@ -24,6 +24,9 @@ export default tseslint.config(
       'build/**',
       'coverage/**',
 
+      // oclif bin executables (plain JS, no TypeScript parsing)
+      'bin/**',
+
       // Config files (specific files, not all JS/MJS)
       'eslint.config.mjs',
       'jest.config.js',
@@ -233,7 +236,7 @@ export default tseslint.config(
           leadingUnderscore: 'allow',
           // Allow kebab-case for object literal keys (third-party APIs like cli-table3, theme names)
           filter: {
-            regex: '^(top-left|top-mid|top-right|bottom-left|bottom-mid|bottom-right|left-mid|right-mid|mid-mid|gold-black)$',
+            regex: '^(top-left|top-mid|top-right|bottom-left|bottom-mid|bottom-right|left-mid|right-mid|mid-mid|gold-black|cyan-purple)$',
             match: false
           }
         },

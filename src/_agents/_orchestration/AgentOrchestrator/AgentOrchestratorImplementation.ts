@@ -224,6 +224,26 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
   }
 
   /**
+   * Compare two results by timestamp ascending
+   */
+  private compareByTimeAscending(params: {
+    first: ContextSearchResult;
+    second: ContextSearchResult;
+  }): number {
+    return params.first.payload.timestamp - params.second.payload.timestamp;
+  }
+
+  /**
+   * Compare two results by timestamp descending
+   */
+  private compareByTimeDescending(params: {
+    first: ContextSearchResult;
+    second: ContextSearchResult;
+  }): number {
+    return params.second.payload.timestamp - params.first.payload.timestamp;
+  }
+
+  /**
    * Generate hierarchical request ID
    */
   private generateRequestId(): string {
@@ -254,9 +274,7 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
       const results = Array.isArray(semanticResults.results) ? semanticResults.results : [];
 
       // Sort by timestamp descending (most recent first)
-      const sortedByTime = [...results].sort(
-        (a, b) => b.payload.timestamp - a.payload.timestamp
-      );
+      const sortedByTime = this.sortResultsByTimeDescending({ results });
 
       // Take top 10: mix of recent and semantically relevant
       // Weight: 60% recent (first 6), 40% semantic (last 4)
@@ -272,7 +290,7 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
       }
 
       // Final sort by timestamp for chronological context
-      return merged.sort((a, b) => a.payload.timestamp - b.payload.timestamp);
+      return this.sortResultsByTimeAscending({ results: merged });
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       this.logger.warn({
@@ -284,6 +302,41 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
       });
       return [];
     }
+  }
+
+  /**
+   * Sort search results by timestamp in ascending order (chronological)
+   */
+  private sortResultsByTimeAscending(params: {
+    results: ContextSearchResult[];
+  }): ContextSearchResult[] {
+    const sortedResults = [...params.results];
+    for (let i = 0; i < sortedResults.length - 1; i++) {
+      for (let j = i + 1; j < sortedResults.length; j++) {
+        this.swapIfNeeded({ array: sortedResults, compareMethod: 'ascending', indexA: i, indexB: j });
+      }
+    }
+    return sortedResults;
+  }
+
+  /**
+   * Sort search results by timestamp in descending order (most recent first)
+   */
+  private sortResultsByTimeDescending(params: {
+    results: ContextSearchResult[];
+  }): ContextSearchResult[] {
+    const sortedResults = [...params.results];
+    for (let i = 0; i < sortedResults.length - 1; i++) {
+      for (let j = i + 1; j < sortedResults.length; j++) {
+        this.swapIfNeeded({
+          array: sortedResults,
+          compareMethod: 'descending',
+          indexA: i,
+          indexB: j,
+        });
+      }
+    }
+    return sortedResults;
   }
 
   /**
@@ -331,5 +384,32 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
       rootRequestId: params.rootRequestId,
       vector: embedding,
     });
+  }
+
+  /**
+   * Swap two elements if needed based on comparison
+   */
+  private swapIfNeeded(params: {
+    array: ContextSearchResult[];
+    compareMethod: 'ascending' | 'descending';
+    indexA: number;
+    indexB: number;
+  }): void {
+    const curr = params.array[params.indexA];
+    const next = params.array[params.indexB];
+
+    if (curr === undefined || next === undefined) {
+      return;
+    }
+
+    const comparison =
+      params.compareMethod === 'ascending'
+        ? this.compareByTimeAscending({ first: curr, second: next })
+        : this.compareByTimeDescending({ first: curr, second: next });
+
+    if (comparison > 0) {
+      params.array[params.indexA] = next;
+      params.array[params.indexB] = curr;
+    }
   }
 }

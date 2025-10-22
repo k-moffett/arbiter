@@ -18,6 +18,16 @@ import type {
 } from './interfaces';
 
 /**
+ * JSON-RPC response from MCP server
+ */
+interface JsonRpcResponse {
+  error?: { code: number; data?: unknown; message: string };
+  id: number;
+  jsonrpc: string;
+  result?: { content: Array<{ text: string; type: string }>; isError?: boolean };
+}
+
+/**
  * MCP Client Implementation
  *
  * @example
@@ -55,88 +65,30 @@ export class MCPClientImplementation implements MCPClient {
     }, this.timeout);
 
     try {
-      // MCP server uses JSON-RPC protocol at /mcp endpoint
-      const jsonrpcRequest = {
-        id: Date.now(),
-        jsonrpc: '2.0',
-        method: 'tools/call',
-        params: {
-          arguments: request.arguments,
-          name: request.name,
-        },
-      };
+      const jsonrpcRequest = this.buildJsonRpcRequest({ request });
+      const response = await this.sendJsonRpcRequest({ controller, jsonrpcRequest });
+      const httpResult = await this.handleHttpResponse({ response });
 
-      const response = await fetch(`${this.baseUrl}/mcp`, {
-        body: JSON.stringify(jsonrpcRequest),
-        headers: {
-          /* eslint-disable @typescript-eslint/naming-convention */
-          'Content-Type': 'application/json',
-          /* eslint-enable @typescript-eslint/naming-convention */
-        },
-        method: 'POST',
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
+      if (!httpResult.success || httpResult.data === undefined) {
         return {
-          error: `HTTP ${String(response.status)}: ${errorText}`,
+          error: httpResult.error ?? 'No data in response',
           success: false,
         };
       }
 
-      // Parse JSON-RPC response
-      const jsonrpcResponse = (await response.json()) as {
-        error?: { code: number; data?: unknown; message: string };
-        id: number;
-        jsonrpc: string;
-        result?: { content: Array<{ text: string; type: string }>; isError?: boolean };
-      };
+      const jsonrpcResponse = httpResult.data;
+      const errorCheck = this.checkJsonRpcErrors({ jsonrpcResponse });
 
-      // Check for JSON-RPC error
-      if (jsonrpcResponse.error !== undefined) {
+      if (!errorCheck.success) {
         return {
-          error: jsonrpcResponse.error.message,
+          error: errorCheck.error ?? 'Unknown error',
           success: false,
         };
       }
 
-      // Check for tool execution error
-      if (jsonrpcResponse.result?.isError === true) {
-        const errorContent = jsonrpcResponse.result.content[0];
-        return {
-          error: errorContent?.text ?? 'Tool execution failed',
-          success: false,
-        };
-      }
-
-      // Extract result from JSON-RPC response
-      const resultContent = jsonrpcResponse.result?.content[0];
-      if (resultContent?.type !== 'text') {
-        return {
-          error: 'Invalid tool response format',
-          success: false,
-        };
-      }
-
-      // Parse the text content as JSON
-      const toolResult = JSON.parse(resultContent.text) as T;
-      return {
-        result: toolResult,
-        success: true,
-      };
+      return this.extractToolResult<T>({ jsonrpcResponse });
     } catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return {
-          error: `Tool call timed out after ${String(this.timeout)}ms`,
-          success: false,
-        };
-      }
-
-      return {
-        error: error instanceof Error ? error.message : String(error),
-        success: false,
-      };
+      return this.handleCallToolError({ error });
     } finally {
       clearTimeout(timeoutId);
     }
@@ -226,5 +178,123 @@ export class MCPClientImplementation implements MCPClient {
     }
 
     return response.result;
+  }
+
+  /**
+   * Build JSON-RPC request for MCP tool call
+   */
+  private buildJsonRpcRequest(params: { request: MCPToolCallRequest }): Record<string, unknown> {
+    return {
+      id: Date.now(),
+      jsonrpc: '2.0',
+      method: 'tools/call',
+      params: {
+        arguments: params.request.arguments,
+        name: params.request.name,
+      },
+    };
+  }
+
+  /**
+   * Check JSON-RPC response for errors
+   */
+  private checkJsonRpcErrors(params: {
+    jsonrpcResponse: JsonRpcResponse;
+  }): { error?: string; success: boolean } {
+    if (params.jsonrpcResponse.error !== undefined) {
+      return {
+        error: params.jsonrpcResponse.error.message,
+        success: false,
+      };
+    }
+
+    if (params.jsonrpcResponse.result?.isError === true) {
+      const errorContent = params.jsonrpcResponse.result.content[0];
+      return {
+        error: errorContent?.text ?? 'Tool execution failed',
+        success: false,
+      };
+    }
+
+    return { success: true };
+  }
+
+  /**
+   * Extract tool result from JSON-RPC response
+   */
+  private extractToolResult<T>(params: {
+    jsonrpcResponse: JsonRpcResponse;
+  }): MCPToolCallResponse<T> {
+    const resultContent = params.jsonrpcResponse.result?.content[0];
+
+    if (resultContent?.type !== 'text') {
+      return {
+        error: 'Invalid tool response format',
+        success: false,
+      };
+    }
+
+    const toolResult = JSON.parse(resultContent.text) as T;
+    return {
+      result: toolResult,
+      success: true,
+    };
+  }
+
+  /**
+   * Handle errors from callTool method
+   */
+  private handleCallToolError(params: { error: unknown }): MCPToolCallResponse<never> {
+    if (params.error instanceof Error && params.error.name === 'AbortError') {
+      return {
+        error: `Tool call timed out after ${String(this.timeout)}ms`,
+        success: false,
+      };
+    }
+
+    return {
+      error: params.error instanceof Error ? params.error.message : String(params.error),
+      success: false,
+    };
+  }
+
+  /**
+   * Handle HTTP response from MCP server
+   */
+  private async handleHttpResponse(params: {
+    response: Response;
+  }): Promise<{ data?: JsonRpcResponse; error?: string; success: boolean }> {
+    if (!params.response.ok) {
+      const errorText = await params.response.text().catch(() => 'Unknown error');
+      return {
+        error: `HTTP ${String(params.response.status)}: ${errorText}`,
+        success: false,
+      };
+    }
+
+    const jsonrpcResponse = (await params.response.json()) as JsonRpcResponse;
+    return {
+      data: jsonrpcResponse,
+      success: true,
+    };
+  }
+
+  /**
+   * Send JSON-RPC request to MCP server
+   */
+  private async sendJsonRpcRequest(params: {
+    controller: AbortController;
+    jsonrpcRequest: Record<string, unknown>;
+  }): Promise<Response> {
+    return await fetch(`${this.baseUrl}/mcp`, {
+      body: JSON.stringify(params.jsonrpcRequest),
+      headers: {
+        /* eslint-disable @typescript-eslint/naming-convention */
+        'Content-Type': 'application/json',
+        /* eslint-enable @typescript-eslint/naming-convention */
+      },
+      method: 'POST',
+      signal: params.controller.signal,
+    });
   }
 }

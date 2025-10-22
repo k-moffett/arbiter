@@ -35,7 +35,7 @@ ENV NODE_OPTIONS="--max-old-space-size=1024"
 # No health check for interactive CLI
 
 # Default command for development
-CMD ["npx", "tsx", "src/_clients/cli/cli.ts"]
+CMD ["npx", "tsx", "src/_clients/CLIService/cli.ts"]
 
 # =============================================================================
 # Stage 2: Builder
@@ -92,4 +92,4 @@ USER nodejs
 # No health check for interactive CLI
 
 # Production command
-CMD ["node", "dist/_clients/cli/cli.js"]
+CMD ["node", "dist/_clients/CLIService/cli.js"]

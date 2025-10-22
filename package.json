@@ -17,6 +17,9 @@
     "typescript",
     "domain-agnostic"
   ],
+  "bin": {
+    "arbiter-cli": "./bin/run.js"
+  },
   "scripts": {
     "// Development": "=== Development Scripts ===",
     "dev": "npm run start:all",
@@ -108,9 +111,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.62.0",
+    "@clack/prompts": "^0.9.0",
     "@modelcontextprotocol/sdk": "^1.17.5",
+    "@oclif/core": "^4.0.0",
     "@qdrant/js-client-rest": "^1.15.1",
     "boxen": "^8.0.1",
+    "cardinal": "^2.1.1",
     "cli-table3": "^0.6.5",
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5",
@@ -120,7 +126,8 @@
     "figlet": "^1.9.3",
     "gradient-string": "^3.0.0",
     "inversify": "^7.10.3",
-    "nanospinner": "^1.2.2",
+    "marked": "^16.4.1",
+    "@aigne/marked-terminal": "^7.3.2",
     "picocolors": "^1.1.1",
     "pino": "^8.16.0",
     "pino-pretty": "^10.2.3",
@@ -135,6 +142,7 @@
   "devDependencies": {
     "@eslint/js": "^9.0.0",
     "@jest/globals": "^29.7.0",
+    "@oclif/prettier-config": "^0.2.1",
     "@types/dockerode": "^3.3.44",
     "@types/express": "^5.0.3",
     "@types/figlet": "^1.7.0",
@@ -160,5 +168,19 @@
   "engines": {
     "node": ">=22.0.0",
     "npm": ">=10.0.0"
+  },
+  "oclif": {
+    "bin": "arbiter-cli",
+    "dirname": "arbiter-cli",
+    "commands": "./dist/_clients/CLIService/_commands",
+    "topicSeparator": " ",
+    "topics": {
+      "config": {
+        "description": "Manage CLI configuration"
+      },
+      "history": {
+        "description": "View and manage conversation history"
+      }
+    }
   }
 }
