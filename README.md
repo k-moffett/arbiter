@@ -67,6 +67,33 @@ npm test
 npm run validate
 ```
 
+### Docker
+
+```bash
+# Start all services with model warming (recommended)
+npm run docker:services:up
+
+# Start services without model warming (faster startup)
+npm run docker:services:up:no-warm
+
+# Start MCP server
+npm run docker:mcp:up
+
+# Start full MVP stack (services + MCP + health check)
+npm run docker:mvp
+
+# Run CLI client
+npm run docker:cli
+
+# Manually trigger model warming (if skipped earlier)
+npm run docker:warm
+
+# Stop all services
+npm run docker:mvp:down
+```
+
+**Model Warming**: By default, Ollama models are pre-loaded into memory after startup to reduce first-request latency. This adds ~30-60 seconds to startup time but eliminates the 10-20 second delay on first requests. Disable by using `docker:services:up:no-warm` or setting `OLLAMA_WARM_MODELS=false` in `.env`.
+
 ---
 
 ## Configuration

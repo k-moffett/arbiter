@@ -5,13 +5,28 @@
  */
 
 /**
+ * Available gradient themes for CLI banner
+ */
+export type GradientTheme = 'pastel' | 'gold-black' | 'gold';
+
+/**
  * CLI configuration
  */
 export interface CLIConfig {
   /** Enable debug mode */
   debug?: boolean;
+  /** Gradient theme for welcome banner (default: "pastel") */
+  gradientTheme?: GradientTheme;
   /** Session ID for this CLI session */
   sessionId: string;
+  /** Show session statistics (default: false) */
+  showStats?: boolean;
+  /** Enable gradient colors for welcome banner (default: true) */
+  useGradient?: boolean;
+  /** Welcome message (default: "Context-Aware AI Agent") */
+  welcomeMessage?: string;
+  /** Welcome title (default: "Arbiter CLI") */
+  welcomeTitle?: string;
 }
 
 /**
@@ -23,6 +38,7 @@ export enum CLICommand {
   EXIT = '/exit',
   HELP = '/help',
   HISTORY = '/history',
+  STATS = '/stats',
 }
 
 /**

@@ -2,8 +2,6 @@
 # Long-running MCP context server with Qdrant dependency
 # Services persist across requests (restart: unless-stopped)
 
-version: '3.8'
-
 networks:
   arbiter-network:
     driver: bridge

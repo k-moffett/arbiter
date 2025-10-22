@@ -230,7 +230,12 @@ export default tseslint.config(
         {
           selector: 'property',
           format: ['camelCase'],
-          leadingUnderscore: 'allow'
+          leadingUnderscore: 'allow',
+          // Allow kebab-case for object literal keys (third-party APIs like cli-table3, theme names)
+          filter: {
+            regex: '^(top-left|top-mid|top-right|bottom-left|bottom-mid|bottom-right|left-mid|right-mid|mid-mid|gold-black)$',
+            match: false
+          }
         },
         {
           selector: 'variable',

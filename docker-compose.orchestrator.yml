@@ -1,8 +1,6 @@
 # Docker Compose - Agent Orchestrator Service
 # Central orchestration service for processing queries with context awareness
 
-version: '3.8'
-
 networks:
   arbiter-network:
     driver: bridge

@@ -1,0 +1,192 @@
+# Docker Compose - Arbiter Main Application Stack
+# Core services: Qdrant, Ollama, MCP Server, Agent Orchestrator
+# Start with: docker compose up -d
+# CLI client is separate: docker compose -f docker-compose.cli.yml up
+
+name: arbiter
+
+networks:
+  arbiter-network:
+    driver: bridge
+    name: arbiter-network
+
+volumes:
+  qdrant_storage:
+    name: arbiter-qdrant-storage
+  ollama_models:
+    name: arbiter-ollama-models
+
+services:
+  # ===========================================================================
+  # Qdrant Vector Database
+  # ===========================================================================
+  qdrant:
+    image: qdrant/qdrant:v1.7.4
+    container_name: arbiter-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"  # REST API
+      - "6334:6334"  # gRPC API
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__LOG_LEVEL=INFO
+    networks:
+      - arbiter-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================================================
+  # Ollama - Embeddings + LLM
+  # ===========================================================================
+  ollama:
+    image: ollama/ollama:latest
+    container_name: arbiter-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+      - ./docker/scripts/ollama:/scripts
+    environment:
+      - OLLAMA_HOST=0.0.0.0
+      - OLLAMA_ORIGINS=*
+      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_MAX_LOADED_MODELS=2
+      - OLLAMA_FLASH_ATTENTION=1
+      - CUDA_VISIBLE_DEVICES=0
+      - OLLAMA_DEBUG=${OLLAMA_DEBUG:-false}
+    logging:
+      driver: "json-file"
+      options:
+        tag: "ollama"
+        labels: "service"
+    networks:
+      - arbiter-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+          memory: 4G
+        limits:
+          memory: 8G
+
+  # ===========================================================================
+  # MCP Server - Context API
+  # ===========================================================================
+  mcp-server:
+    build:
+      context: .
+      dockerfile: docker/services/Dockerfile.mcp-server
+      target: production
+    container_name: arbiter-mcp-server
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - AGENT_ORCHESTRATOR_URL=${AGENT_ORCHESTRATOR_URL:-http://agent-orchestrator:3200}
+      - TRANSPORT=${TRANSPORT:-streamable-http}
+      - MCP_HTTP_PORT=${MCP_HTTP_PORT:-3100}
+      - MAX_CONCURRENT_REQUESTS=${MAX_CONCURRENT_REQUESTS:-50}
+      - REQUEST_TIMEOUT=${REQUEST_TIMEOUT:-30000}
+      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=2048}
+      - LOG_PREFIX=${LOG_PREFIX:-[ARBITER]}
+      - LOG_FORMAT=${LOG_FORMAT:-text}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_USE_COLORS=${LOG_USE_COLORS:-true}
+    depends_on:
+      qdrant:
+        condition: service_started
+    networks:
+      - arbiter-network
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3100/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ===========================================================================
+  # Agent Orchestrator - Core Agent Logic
+  # ===========================================================================
+  agent-orchestrator:
+    build:
+      context: .
+      dockerfile: docker/services/Dockerfile.orchestrator
+      target: production
+    container_name: arbiter-agent-orchestrator
+    restart: unless-stopped
+    ports:
+      - "3200:3200"
+    environment:
+      - MCP_SERVER_URL=${MCP_SERVER_URL:-http://mcp-server:3100}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-90000}
+      - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+      - ORCHESTRATOR_PORT=${ORCHESTRATOR_PORT:-3200}
+      - NODE_ENV=${NODE_ENV:-production}
+      - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=2048}
+      - LOG_PREFIX=${LOG_PREFIX:-[ARBITER]}
+      - LOG_FORMAT=${LOG_FORMAT:-text}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_USE_COLORS=${LOG_USE_COLORS:-true}
+    depends_on:
+      mcp-server:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    networks:
+      arbiter-network:
+        aliases:
+          - agent-orchestrator
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '1.0'
+          memory: 1G
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3200/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s

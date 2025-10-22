@@ -2,8 +2,6 @@
 # Services: Qdrant (Vector DB), Ollama (Embeddings/Fallback), vLLM (Primary LLM)
 # Optimized for: RTX 4070 12GB VRAM
 
-version: '3.8'
-
 networks:
   arbiter-network:
     driver: bridge
@@ -155,6 +153,31 @@ services:
     networks:
       - arbiter-network
     restart: "no"  # One-time init - exit after pulling models
+
+  # ===========================================================================
+  # Ollama Model Warming (Performance Optimization)
+  # ===========================================================================
+  # Enabled by default to reduce first-request latency
+  # To disable: OLLAMA_WARM_MODELS=false or remove --profile warm from docker compose
+  ollama-warm:
+    image: curlimages/curl:latest
+    container_name: arbiter-ollama-warm
+    depends_on:
+      ollama-init:
+        condition: service_completed_successfully
+      ollama:
+        condition: service_started
+    volumes:
+      - ./docker/scripts/ollama:/scripts:ro
+    environment:
+      - OLLAMA_HOST=ollama:11434
+    entrypoint: /bin/sh
+    command: /scripts/warm-models.sh
+    networks:
+      - arbiter-network
+    restart: "no"  # One-time warming - exit after loading models
+    profiles:
+      - warm  # Enable with: docker compose --profile warm up
 
   # ===========================================================================
   # Qdrant Web UI (Optional - for development/debugging)

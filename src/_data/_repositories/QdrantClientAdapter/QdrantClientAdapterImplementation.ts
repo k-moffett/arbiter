@@ -11,7 +11,6 @@ import type {
   QdrantClientConfig,
   QdrantCondition,
   QdrantFilter,
-  QdrantPoint,
 } from './interfaces';
 
 import { QdrantClient } from '@qdrant/js-client-rest';
@@ -165,15 +164,6 @@ export class QdrantClientAdapter implements VectorRepository {
       };
     });
 
-    // Debug logging
-    console.log('[DEBUG] Qdrant upsert request:', {
-      collection: this.collection,
-      pointCount: points.length,
-      firstPointId: points[0]?.id,
-      firstVectorLength: points[0]?.vector?.length,
-      payloadKeys: points[0] ? Object.keys(points[0].payload) : [],
-    });
-
     try {
       await this.client.upsert(this.collection, {
         points,
@@ -280,6 +270,34 @@ export class QdrantClientAdapter implements VectorRepository {
   }
 
   /**
+   * Check if value is a primitive type supported by Qdrant
+   */
+  private isPrimitive(value: unknown): boolean {
+    if (typeof value === 'string') {
+      return true;
+    }
+    if (typeof value === 'number') {
+      return true;
+    }
+    if (typeof value === 'boolean') {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Check if value is an array of primitives
+   */
+  private isPrimitiveArray(value: unknown): boolean {
+    if (!Array.isArray(value)) {
+      return false;
+    }
+    return value.every(
+      (v) => typeof v === 'string' || typeof v === 'number'
+    );
+  }
+
+  /**
    * Sanitize payload for Qdrant by ensuring only primitive values
    * Complex objects are converted to JSON strings
    */
@@ -287,44 +305,53 @@ export class QdrantClientAdapter implements VectorRepository {
     const sanitized: Record<string, unknown> = {};
 
     for (const [key, value] of Object.entries(payload)) {
-      if (value === null || value === undefined) {
-        continue; // Skip null/undefined
-      }
-
-      // Primitives are supported directly
-      if (
-        typeof value === 'string' ||
-        typeof value === 'number' ||
-        typeof value === 'boolean'
-      ) {
-        sanitized[key] = value;
-      }
-      // Arrays of primitives
-      else if (
-        Array.isArray(value) &&
-        value.every((v) => typeof v === 'string' || typeof v === 'number')
-      ) {
-        sanitized[key] = value;
-      }
-      // Dates to ISO strings
-      else if (value instanceof Date) {
-        sanitized[key] = value.toISOString();
-      }
-      // Complex objects to JSON strings
-      else if (typeof value === 'object') {
-        try {
-          sanitized[key] = JSON.stringify(value);
-        } catch {
-          // Skip if can't serialize
-          continue;
-        }
-      }
-      // Fallback: convert to string
-      else {
-        sanitized[key] = String(value);
+      const sanitizedValue = this.sanitizeValue(value);
+      if (sanitizedValue !== null) {
+        sanitized[key] = sanitizedValue;
       }
     }
 
     return sanitized;
+  }
+
+  /**
+   * Sanitize a single payload value
+   */
+  private sanitizeValue(value: unknown): unknown {
+    if (value === null) {
+      return null;
+    }
+    if (value === undefined) {
+      return null;
+    }
+
+    if (this.isPrimitive(value)) {
+      return value;
+    }
+    if (this.isPrimitiveArray(value)) {
+      return value;
+    }
+
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (typeof value === 'object') {
+      try {
+        return JSON.stringify(value);
+      } catch {
+        return null;
+      }
+    }
+
+    // Fallback: primitives only, avoid Object.toString()
+    if (typeof value === 'function') {
+      return null;
+    }
+    if (typeof value === 'symbol') {
+      return null;
+    }
+
+    return null;
   }
 }

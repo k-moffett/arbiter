@@ -87,10 +87,10 @@ export class MCPClientImplementation implements MCPClient {
 
       // Parse JSON-RPC response
       const jsonrpcResponse = (await response.json()) as {
+        error?: { code: number; data?: unknown; message: string };
         id: number;
         jsonrpc: string;
         result?: { content: Array<{ text: string; type: string }>; isError?: boolean };
-        error?: { code: number; data?: unknown; message: string };
       };
 
       // Check for JSON-RPC error
@@ -112,7 +112,7 @@ export class MCPClientImplementation implements MCPClient {
 
       // Extract result from JSON-RPC response
       const resultContent = jsonrpcResponse.result?.content[0];
-      if (resultContent === undefined || resultContent.type !== 'text') {
+      if (resultContent?.type !== 'text') {
         return {
           error: 'Invalid tool response format',
           success: false,

@@ -6,8 +6,6 @@
  * Future versions will support query decomposition and Docker agent spawning.
  */
 
-import { randomUUID } from 'node:crypto';
-
 import type {
   ContextPayload,
   ContextSearchResult,
@@ -16,6 +14,8 @@ import type { MCPClient } from '../../_shared/_lib/MCPClient';
 import type { CompletionParams, EmbedParams, LLMResponse } from '../../_shared/types';
 import type { AgentOrchestrator } from './interfaces';
 import type { QueryResult } from './types';
+
+import { randomUUID } from 'node:crypto';
 
 /**
  * Agent Orchestrator Configuration
@@ -228,7 +228,7 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
 
       // Ensure results is always an array
       return Array.isArray(searchResult.results) ? searchResult.results : [];
-    } catch (error) {
+    } catch {
       // If context search fails (e.g., empty database), return empty array
       // This allows the query to proceed without historical context
       return [];

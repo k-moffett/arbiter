@@ -5,13 +5,14 @@
  * Handles query processing, context retrieval, and LLM interactions.
  */
 
-import express from 'express';
 import type { Express, NextFunction, Request, Response } from 'express';
 import type { Server } from 'node:http';
 
+import express from 'express';
+
+import { Logger } from '../../../_shared/_infrastructure/index.js';
 import { MCPClient } from '../../_shared/_lib/MCPClient/index.js';
 import { OllamaProvider } from '../../_shared/_lib/OllamaProvider/index.js';
-import { Logger } from '../../../_shared/_infrastructure/index.js';
 import { AgentOrchestrator } from './index.js';
 
 const logger = new Logger({
@@ -28,12 +29,15 @@ function readConfig(): {
   llmModel: string;
   mcpServerUrl: string;
   ollamaBaseUrl: string;
+  ollamaTimeout: number;
   port: number;
 } {
   // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const port = Number(process.env['ORCHESTRATOR_PORT'] ?? '3200');
   // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const ollamaBaseUrl = process.env['OLLAMA_BASE_URL'] ?? 'http://ollama:11434';
+  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
+  const ollamaTimeout = Number(process.env['OLLAMA_TIMEOUT'] ?? '90000');
   // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const mcpServerUrl = process.env['MCP_SERVER_URL'] ?? 'http://mcp-server:3100';
   // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
@@ -46,38 +50,28 @@ function readConfig(): {
     llmModel,
     mcpServerUrl,
     ollamaBaseUrl,
+    ollamaTimeout,
     port,
   };
 }
 
 /**
- * Main server entry point
+ * Initialize all services (Ollama, MCP, Orchestrator)
  */
-async function main(): Promise<void> {
-  const config = readConfig();
-
-  logger.info({
-    message: 'Starting Agent Orchestrator Server',
-    context: {
-      embeddingModel: config.embeddingModel,
-      llmModel: config.llmModel,
-      mcpServerUrl: config.mcpServerUrl,
-      ollamaBaseUrl: config.ollamaBaseUrl,
-      port: config.port,
-    },
-  });
-
-  // Initialize Ollama provider
+function setupServices(config: ReturnType<typeof readConfig>): {
+  mcpClient: MCPClient;
+  ollamaProvider: OllamaProvider;
+  orchestrator: AgentOrchestrator;
+} {
   const ollamaProvider = new OllamaProvider({
     baseUrl: config.ollamaBaseUrl,
     embeddingModel: config.embeddingModel,
     model: config.llmModel,
+    timeout: config.ollamaTimeout,
   });
 
-  // Initialize MCP client
   const mcpClient = new MCPClient({ baseUrl: config.mcpServerUrl });
 
-  // Initialize orchestrator
   const orchestrator = new AgentOrchestrator({
     embeddingModel: config.embeddingModel,
     llmModel: config.llmModel,
@@ -85,10 +79,16 @@ async function main(): Promise<void> {
     ollamaProvider,
   });
 
-  // Create Express app
+  return { mcpClient, ollamaProvider, orchestrator };
+}
+
+/**
+ * Create Express app with middleware
+ */
+function createExpressApp(): Express {
   const app: Express = express();
 
-  // Middleware - Large limit for self-hosted service (handles multiple embeddings + large payloads)
+  // Middleware - Large limit for self-hosted service
   app.use(express.json({ limit: '50mb' }));
 
   // CORS
@@ -105,6 +105,15 @@ async function main(): Promise<void> {
 
     next();
   });
+
+  return app;
+}
+
+/**
+ * Setup route handlers
+ */
+function setupRoutes(params: { app: Express; orchestrator: AgentOrchestrator }): void {
+  const { app, orchestrator } = params;
 
   // Health check
   // eslint-disable-next-line local-rules/require-typed-params, @typescript-eslint/max-params
@@ -123,7 +132,6 @@ async function main(): Promise<void> {
   // Process query endpoint
   // eslint-disable-next-line local-rules/require-typed-params, @typescript-eslint/max-params
   app.post('/process-query', async (req: Request, res: Response) => {
-    // Declare outside try block for error logging
     let query: string | undefined;
     let sessionId: string | undefined;
 
@@ -146,7 +154,7 @@ async function main(): Promise<void> {
       }
 
       const result = await orchestrator.processQuery({
-        context,
+        ...(context !== undefined ? { context } : {}),
         query,
         sessionId,
       });
@@ -171,6 +179,33 @@ async function main(): Promise<void> {
       });
     }
   });
+}
+
+/**
+ * Main server entry point
+ */
+async function main(): Promise<void> {
+  const config = readConfig();
+
+  logger.info({
+    message: 'Starting Agent Orchestrator Server',
+    context: {
+      embeddingModel: config.embeddingModel,
+      llmModel: config.llmModel,
+      mcpServerUrl: config.mcpServerUrl,
+      ollamaBaseUrl: config.ollamaBaseUrl,
+      port: config.port,
+    },
+  });
+
+  // Initialize services
+  const { orchestrator } = setupServices(config);
+
+  // Create Express app with middleware
+  const app = createExpressApp();
+
+  // Setup routes
+  setupRoutes({ app, orchestrator });
 
   // Start server
   let server: Server | null = null;
@@ -200,10 +235,11 @@ async function main(): Promise<void> {
     logger.info({ message: 'Shutting down' });
 
     if (server !== null) {
+      const serverToClose = server;
       // Wrapping Node.js callback-based API requires Promise constructor
       // eslint-disable-next-line local-rules/no-promise-constructor, local-rules/require-typed-params, @typescript-eslint/max-params
       await new Promise<void>((resolve, reject) => {
-        server!.close((error) => {
+        serverToClose.close((error) => {
           if (error !== undefined) {
             reject(error);
             return;
