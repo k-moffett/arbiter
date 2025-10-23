@@ -26,9 +26,12 @@ export function buildQdrantFilters(params: {
   userId: string;
 }): QdrantFilters {
   const { filters, userId } = params;
-  const qdrantFilters: QdrantFilters = {
-    userId,
-  };
+  const qdrantFilters: QdrantFilters = {};
+
+  // Add userId as a filter (still prioritizes user's own messages)
+  if (userId !== undefined && userId !== '') {
+    qdrantFilters.userId = userId;
+  }
 
   if (filters === undefined) {
     return qdrantFilters;

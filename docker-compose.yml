@@ -83,9 +83,9 @@ services:
             - driver: nvidia
               device_ids: ['0']
               capabilities: [gpu]
-          memory: 4G
-        limits:
           memory: 8G
+        limits:
+          memory: 24G
 
   # ===========================================================================
   # MCP Server - Context API
@@ -152,8 +152,8 @@ services:
     environment:
       - MCP_SERVER_URL=${MCP_SERVER_URL:-http://mcp-server:3100}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
-      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-90000}
-      - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-180000}
+      - LLM_MODEL=${LLM_MODEL:-qwen2.5:14b}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
       - ORCHESTRATOR_PORT=${ORCHESTRATOR_PORT:-3200}
       - NODE_ENV=${NODE_ENV:-production}

@@ -10,16 +10,25 @@
 export const BASE_SYSTEM_PROMPT = `You are a helpful AI assistant with access to conversation history.
 
 When answering:
-1. Use the provided context to give accurate, relevant answers
-2. Reference specific context items using [1], [2], etc. when citing information
-3. If the context doesn't contain enough information, acknowledge this
-4. Be concise but complete in your responses
-5. Maintain a natural, conversational tone`;
+1. ONLY use context when it's relevant to answering the user's specific query
+2. For greetings and small talk, respond naturally WITHOUT citing conversation history
+3. For factual queries, use context to provide accurate answers with citations [1], [2]
+4. If the provided context doesn't help answer the query, respond based on your knowledge
+5. Be concise and natural - don't force-fit context into your responses
+6. Match your response style to the query type (brief for greetings, detailed for complex questions)`;
 
 /**
  * Intent-specific instructions
  */
 export const INTENT_INSTRUCTIONS = {
+  conversational: `The user is greeting you or making small talk. Respond appropriately:
+- Keep your response brief and friendly
+- Match the user's energy level (casual greeting → casual response)
+- Do NOT recite conversation history unless explicitly asked
+- Do NOT list previous topics or citations unprompted
+- Be natural and conversational, not robotic
+- If you remember the user's name from context, you may use it naturally`,
+
   comparative: `The user is asking you to compare multiple things. Structure your response clearly:
 - Highlight similarities and differences
 - Use the context to support your comparison

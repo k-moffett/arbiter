@@ -170,6 +170,67 @@ export class RAGOrchestrationServiceImplementation {
 
     this.logRouting({ classification: route.classification, path: route.path });
 
+    // Early exit for queries that don't need retrieval (e.g., greetings)
+    if (!route.classification.needsRetrieval) {
+      this.logger.debug({
+        message: 'Skipping retrieval - query does not require context',
+        metadata: {
+          category: route.classification.category,
+          complexity: route.classification.complexity,
+        },
+      });
+
+      stepsExecuted.push('build_prompt');
+      const prompt = this.buildPromptWithoutContext({ params, route });
+      const duration = Date.now() - startTime;
+
+      this.logOrchestrationComplete({
+        contextFitted: 0,
+        duration,
+        pathTaken: route.path,
+        stepsExecuted,
+      });
+
+      return this.createResponse({
+        decomposition: null,
+        duration,
+        enhancement: null,
+        fittedContext: {
+          includedCount: 0,
+          includedResults: [],
+          truncatedCount: 0,
+        },
+        params,
+        pathTaken: route.path,
+        prompt,
+        retrieval: {
+          count: 0,
+          results: [],
+          retrievalMetadata: {
+            alternativesCount: 0,
+            filtersApplied: [],
+            relatedCount: 0,
+            retrievalDuration: 0,
+            totalDocumentsSearched: 0,
+            usedHyDE: false,
+          },
+        },
+        stepsExecuted,
+        validation: {
+          rejectedCount: 0,
+          validCount: 0,
+          validResults: [],
+          validationMetadata: {
+            avgValidationScore: 0,
+            failedCount: 0,
+            passedCount: 0,
+            totalResults: 0,
+            validationDuration: 0,
+          },
+        },
+      });
+    }
+
     const enhancement = await this.executeEnhancement({
       params,
       route,
@@ -182,7 +243,7 @@ export class RAGOrchestrationServiceImplementation {
     });
 
     stepsExecuted.push('retrieve', 'validate', 'fit');
-    const retrieval = await this.executeRetrieval({ enhancement, params });
+    const retrieval = await this.executeRetrieval({ enhancement, params, route });
     const validation = await this.ragValidator.validate({
       query: params.query,
       results: retrieval.results,
@@ -231,6 +292,27 @@ export class RAGOrchestrationServiceImplementation {
   }
 
   /**
+   * Build prompt without context (for conversational queries)
+   */
+  private buildPromptWithoutContext(opts: {
+    params: RAGOrchestrationRequest;
+    route: QueryRoute;
+  }): BuiltPrompt {
+    return this.advancedPromptBuilder.buildPrompt({
+      query: opts.params.query,
+      queryIntent: opts.route.classification.category as
+        | 'comparative'
+        | 'conversational'
+        | 'factual'
+        | 'hybrid'
+        | 'listBuilding'
+        | 'semantic'
+        | 'temporal',
+      validatedResults: [],
+    });
+  }
+
+  /**
    * Build final prompt with context
    */
   private buildFinalPrompt(opts: {
@@ -249,6 +331,7 @@ export class RAGOrchestrationServiceImplementation {
 
     const validIntents = [
       'comparative',
+      'conversational',
       'factual',
       'hybrid',
       'listBuilding',
@@ -258,6 +341,7 @@ export class RAGOrchestrationServiceImplementation {
     if (validIntents.includes(opts.route.classification.category)) {
       promptParams.queryIntent = opts.route.classification.category as
         | 'comparative'
+        | 'conversational'
         | 'factual'
         | 'hybrid'
         | 'listBuilding'
@@ -343,15 +427,40 @@ export class RAGOrchestrationServiceImplementation {
   }
 
   /**
+   * Calculate retrieval limit based on query complexity
+   */
+  private calculateRetrievalLimit(complexity: number): number {
+    // Simple queries (greetings, basic questions): minimal context
+    if (complexity <= 3) {
+      return 10;
+    }
+
+    // Moderate queries (single-topic questions): moderate context
+    if (complexity <= 6) {
+      return 30;
+    }
+
+    // Complex queries (multi-part, comparative): maximum context
+    return 50;
+  }
+
+  /**
    * Execute retrieval with enhancement params
    */
   private async executeRetrieval(opts: {
     enhancement: EnhancedQuery | null;
     params: RAGOrchestrationRequest;
+    route: QueryRoute;
   }): Promise<RetrievedContext> {
+    // Scale retrieval limit by query complexity
+    const limit = this.calculateRetrievalLimit(opts.route.classification.complexity);
+
     const retrievalParams: HybridSearchParams = {
-      filters: { sessionId: opts.params.sessionId },
-      limit: 20,
+      filters: {
+        // Remove sessionId hard filter to enable cross-session memory
+        // userId will still filter by user in the MCP layer
+      },
+      limit,
       query: opts.params.query,
       userId: opts.params.userId,
     };

@@ -213,7 +213,37 @@ async function main(): Promise<void> {
   });
 
   // Initialize services
-  const { orchestrator } = setupServices(config);
+  const { ollamaProvider, orchestrator } = setupServices(config);
+
+  // Verify LLM model before starting server
+  try {
+    logger.info({
+      message: 'Verifying LLM model availability',
+      context: { model: config.llmModel },
+    });
+
+    await ollamaProvider.complete({
+      maxTokens: 5,
+      model: config.llmModel,
+      prompt: 'test',
+      temperature: 0,
+    });
+
+    logger.info({
+      message: 'LLM model verified and ready',
+      context: { model: config.llmModel },
+    });
+  } catch (error) {
+    logger.error({
+      message: 'Failed to verify LLM model - may need to pull it',
+      error: error instanceof Error ? error : new Error(String(error)),
+      context: {
+        model: config.llmModel,
+        suggestion: `Run: docker exec arbiter-ollama ollama pull ${config.llmModel}`,
+      },
+    });
+    throw new Error(`LLM model ${config.llmModel} not available. Please pull it first.`);
+  }
 
   // Create Express app with middleware
   const app = createExpressApp();

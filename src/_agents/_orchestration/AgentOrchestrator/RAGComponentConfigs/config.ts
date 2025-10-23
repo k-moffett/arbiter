@@ -88,13 +88,13 @@ export interface RAGSystemConfig {
  * - Complexity threshold 7 for 70/30 fast/complex split
  * - 60/40 dense/BM25 weighting for hybrid search
  * - BM25 k1=1.5, b=0.75 (Okapi BM25 standards)
- * - 4096 context token window (Llama 3.1 limit)
- * - 0.3 minimum relevance score (filters bottom 30%)
+ * - 24576 context token window (Qwen2.5:32b, 75% of 32K max)
+ * - 0.15 minimum relevance score (permissive for conversational context)
  * - Quality weights: 40% relevance, 30% completeness, 30% clarity
  */
 export const DEFAULT_RAG_CONFIG: RAGSystemConfig = {
   // Global models
-  llmModel: 'llama3.1:8b',
+  llmModel: 'qwen2.5:14b',
   embeddingModel: 'nomic-embed-text',
 
   // QueryRouter
@@ -118,14 +118,14 @@ export const DEFAULT_RAG_CONFIG: RAGSystemConfig = {
 
   // QueryDecomposer
   queryDecomposer: {
-    llmModel: 'llama3.1:8b',
+    llmModel: 'qwen2.5:32b',
     maxSubQueries: 5, // Limit complexity
     temperature: 0.4, // Balance creativity and consistency
   },
 
   // QueryEnhancer
   queryEnhancer: {
-    llmModel: 'llama3.1:8b',
+    llmModel: 'qwen2.5:32b',
     maxAlternatives: 3, // 3 alternative phrasings
     maxRelated: 2, // 2 related queries
     temperature: 0.5, // More creative for variations
@@ -137,7 +137,7 @@ export const DEFAULT_RAG_CONFIG: RAGSystemConfig = {
     bm25K1: 1.5, // Standard term frequency saturation
     bm25Weight: 0.4, // 40% sparse
     denseWeight: 0.6, // 60% dense (semantic search weighted higher)
-    maxResultsPerQuery: 20, // Per query variation
+    maxResultsPerQuery: 50, // Per query variation (increased for historical context)
     temporalThresholds: {
       lastMessage: 300000, // 5 minutes
       recent: 3600000, // 1 hour
@@ -148,21 +148,21 @@ export const DEFAULT_RAG_CONFIG: RAGSystemConfig = {
   // ContextWindowManager
   contextWindowManager: {
     charsPerToken: 4, // Rough estimate (upgrade to tiktoken later)
-    maxContextTokens: 4096, // Llama 3.1 8B context window
+    maxContextTokens: 24576, // Qwen2.5:32b (75% of 32K max)
     minResponseTokens: 512, // Reserve for response generation
   },
 
   // RAGValidator
   ragValidator: {
-    defaultMinScore: 0.3, // Filter bottom 30%
-    llmModel: 'llama3.1:8b',
+    defaultMinScore: 0.15, // More permissive for conversational context (was 0.3)
+    llmModel: 'qwen2.5:32b',
     maxParallelValidations: 5, // Balance speed vs rate limits
     temperature: 0.3, // Consistent relevance scoring
   },
 
   // QualityGrader (feedback loop)
   qualityGrader: {
-    llmModel: 'llama3.1:8b',
+    llmModel: 'qwen2.5:32b',
     temperature: 0.3, // Consistent grading
     weights: {
       clarity: 0.3, // 30% - how clear
@@ -173,7 +173,7 @@ export const DEFAULT_RAG_CONFIG: RAGSystemConfig = {
 
   // ToolPlanner
   toolPlanner: {
-    llmModel: 'llama3.1:8b',
+    llmModel: 'qwen2.5:32b',
     maxSteps: 5, // Limit execution complexity
     temperature: 0.4, // Balance creativity and consistency
   },
