@@ -91,13 +91,9 @@ export default class ConfigCommand extends BaseCommandImplementation {
       `Unicode Support: ${params.terminal.asciiOnly ? 'No' : 'Yes'}`,
       '',
       'Environment Variables:',
-      // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
       `  CLI_GRADIENT_THEME: ${process.env['CLI_GRADIENT_THEME'] ?? 'pastel'}`,
-      // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
       `  CLI_SHOW_STATS: ${process.env['CLI_SHOW_STATS'] ?? 'false'}`,
-      // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
       `  CLI_FORCE_COLOR: ${process.env['CLI_FORCE_COLOR'] ?? 'false'}`,
-      // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
       `  CLI_ASCII_ONLY: ${process.env['CLI_ASCII_ONLY'] ?? 'false'}`,
     ];
 

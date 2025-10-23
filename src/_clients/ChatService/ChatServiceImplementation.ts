@@ -147,7 +147,6 @@ export class ChatServiceImplementation implements ChatService {
     this.addMessageToSession({ message: userMessage, session });
 
     // Extract userId from session metadata
-    // eslint-disable-next-line local-rules/no-bracket-notation -- metadata is an index signature
     const userId = session.metadata['userId'];
     if (typeof userId !== 'string') {
       throw new Error('userId not found in session metadata');

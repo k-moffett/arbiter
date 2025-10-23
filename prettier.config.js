@@ -16,7 +16,7 @@ module.exports = {
 
   // Quotes
   singleQuote: true,
-  quoteProps: 'as-needed',
+  quoteProps: 'consistent',
 
   // Trailing commas
   trailingComma: 'es5',

@@ -32,17 +32,11 @@ function readConfig(): {
   ollamaTimeout: number;
   port: number;
 } {
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const port = Number(process.env['ORCHESTRATOR_PORT'] ?? '3200');
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const ollamaBaseUrl = process.env['OLLAMA_BASE_URL'] ?? 'http://ollama:11434';
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const ollamaTimeout = Number(process.env['OLLAMA_TIMEOUT'] ?? '90000');
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const mcpServerUrl = process.env['MCP_SERVER_URL'] ?? 'http://mcp-server:3100';
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const llmModel = process.env['LLM_MODEL'] ?? 'llama3.1:8b';
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const embeddingModel = process.env['EMBEDDING_MODEL'] ?? 'nomic-embed-text';
 
   return {

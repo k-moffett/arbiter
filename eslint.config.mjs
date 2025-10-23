@@ -67,7 +67,8 @@ export default tseslint.config(
           'max-class-methods': maxClassMethods,
           'max-class-properties': maxClassProperties,
           'max-conditions-per-statement': maxConditionsPerStatement,
-          'no-bracket-notation': noBracketNotation,
+            // This is causing a lot of issues with the AI writing code, so I am commenting it out for now.
+          // 'no-bracket-notation': noBracketNotation,
           'no-logging-in-loops': noLoggingInLoops,
           'no-promise-constructor': noPromiseConstructor,
           'no-switch-statement': noSwitchStatement,
@@ -144,7 +145,7 @@ export default tseslint.config(
       'local-rules/max-class-methods': ['error', 15],
       'local-rules/max-class-properties': ['error', 15],
       'local-rules/max-conditions-per-statement': ['error', { max: 1 }],
-      'local-rules/no-bracket-notation': 'error',
+      // 'local-rules/no-bracket-notation': 'error',
       'local-rules/no-logging-in-loops': 'error',
       'local-rules/no-promise-constructor': 'error',
       'local-rules/no-switch-statement': 'error',

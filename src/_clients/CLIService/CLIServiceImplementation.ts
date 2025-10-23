@@ -106,7 +106,6 @@ export class CLIServiceImplementation implements CLIService {
     });
 
     // Initialize spinner with configuration from environment
-    // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
     const animationStyle = (process.env['CLI_ANIMATION_STYLE'] ?? 'spinner') as AnimationStyle;
     this.spinner = new NonBlockingSpinnerImplementation({
       animationStyle,
@@ -297,7 +296,6 @@ Available commands:
    */
   private generateAsciiTitle(params: { terminalWidth: number; title: string }): string {
     // Read font preference from environment
-    // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
     const fontPreference = process.env['CLI_BANNER_FONT'] ?? 'Small Slant';
 
     // If font disabled, return empty string
@@ -336,9 +334,7 @@ Available commands:
    */
   private getGradientColors(): string[] {
     // Check for custom gradient colors from environment
-    // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
     const customStart = process.env['CLI_BANNER_GRADIENT_START'];
-    // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
     const customEnd = process.env['CLI_BANNER_GRADIENT_END'];
 
     // If both custom colors are set, use them
@@ -347,7 +343,6 @@ Available commands:
     }
 
     // Otherwise use theme from environment or default
-    // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
     const theme = process.env['CLI_BANNER_GRADIENT_THEME'] ?? 'pastel';
 
     const themeMap: Record<string, string[]> = {
@@ -361,7 +356,7 @@ Available commands:
 
     // Return theme colors or default to pastel
     const pastelColors: [string, string] = ['#a8edea', '#fed6e3'];
-    const pastelTheme = themeMap.pastel ?? pastelColors;
+    const pastelTheme = themeMap['pastel'] ?? pastelColors;
     return themeMap[theme] ?? pastelTheme;
   }
 

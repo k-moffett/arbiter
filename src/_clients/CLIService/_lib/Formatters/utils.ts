@@ -22,11 +22,8 @@ import wrapAnsi from 'wrap-ansi';
  * Detect terminal capabilities
  */
 export function detectTerminal(): TerminalCapabilities {
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const forceColor = process.env['CLI_FORCE_COLOR'] === 'true';
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const asciiOnly = process.env['CLI_ASCII_ONLY'] === 'true';
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const widthOverride = process.env['CLI_TERMINAL_WIDTH'];
 
   const isTTY = process.stdout.isTTY;

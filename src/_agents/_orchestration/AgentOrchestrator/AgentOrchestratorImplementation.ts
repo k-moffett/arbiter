@@ -1,23 +1,24 @@
 /**
  * Agent Orchestrator Implementation
  *
- * MVP implementation of agent orchestration service.
- * Processes queries with full context awareness using dual context system.
- * Future versions will support query decomposition and Docker agent spawning.
+ * Advanced RAG-powered agent orchestration service.
+ * Features dual-path architecture, hybrid search, and quality feedback loop.
  */
 
-import type {
-  ContextPayload,
-  ContextSearchResult,
-} from '../../../_services/_mcpServer/ContextToolRegistry';
+import type { ContextPayload } from '../../../_services/_mcpServer/ContextToolRegistry';
 import type { MCPClient } from '../../_shared/_lib/MCPClient';
 import type { CompletionParams, EmbedParams, LLMResponse } from '../../_shared/types';
 import type { AgentOrchestrator } from './interfaces';
+import type { RAGSystemConfig } from './RAGComponentConfigs';
 import type { QueryResult } from './types';
 
 import { randomUUID } from 'node:crypto';
 
 import { Logger } from '../../../_shared/_infrastructure';
+import { ConfidenceCalculator } from './ConfidenceCalculator';
+import { DEFAULT_RAG_CONFIG } from './RAGComponentConfigs';
+import { RAGComponentFactory } from './RAGComponentFactory';
+import { RAGOrchestrationService } from './RAGOrchestrationService';
 
 /**
  * Agent Orchestrator Configuration
@@ -37,6 +38,8 @@ export interface AgentOrchestratorConfig {
     embed(params: EmbedParams): Promise<number[]>;
     health(): Promise<boolean>;
   };
+  /** RAG system configuration (optional, uses defaults if not provided) */
+  ragConfig?: RAGSystemConfig;
 }
 
 /**
@@ -64,6 +67,7 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
   private readonly logger: Logger;
   private readonly mcpClient: MCPClient;
   private readonly ollamaProvider: AgentOrchestratorConfig['ollamaProvider'];
+  private readonly ragService: RAGOrchestrationService;
   private requestCounter: number = 0;
   private readonly startTime: number;
 
@@ -77,6 +81,24 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
       metadata: {
         className: 'AgentOrchestratorImplementation',
         serviceName: 'Agent Orchestrator',
+      },
+    });
+
+    // Initialize RAG system with all components
+    const ragConfig = config.ragConfig ?? DEFAULT_RAG_CONFIG;
+    this.ragService = RAGComponentFactory.create({
+      config: ragConfig,
+      logger: this.logger,
+      mcpClient: this.mcpClient,
+      ollamaProvider: this.ollamaProvider,
+      userId: 'system', // Default, will be overridden per request
+    });
+
+    this.logger.info({
+      message: 'Agent Orchestrator initialized with advanced RAG system',
+      metadata: {
+        llmModel: this.llmModel,
+        embeddingModel: this.embeddingModel,
       },
     });
   }
@@ -98,8 +120,9 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
   }
 
   /**
-   * Process query with context awareness
+   * Process query with advanced RAG pipeline
    */
+  // eslint-disable-next-line max-lines-per-function -- RAG orchestration requires multiple sequential steps
   public async processQuery(params: {
     context?: Record<string, unknown>;
     query: string;
@@ -108,139 +131,104 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
   }): Promise<QueryResult> {
     const startTime = Date.now();
 
-    // Generate request ID
+    // Generate request ID and message ID
     const requestId = this.generateRequestId();
-    const rootRequestId = requestId; // MVP: no parent requests yet
+    const rootRequestId = requestId;
+    const messageId = randomUUID();
 
-    // Step 1: Generate embedding for query
-    const queryEmbedding = await this.ollamaProvider.embed({
-      model: this.embeddingModel,
-      text: params.query,
-    });
-
-    // Step 2: Search for relevant context
-    const contextResults = await this.searchRelevantContext({
-      queryEmbedding,
+    // Step 1: RAG Orchestration (all advanced RAG components)
+    const ragResult = await this.ragService.orchestrate({
+      messageId,
+      query: params.query,
+      sessionId: params.sessionId,
       userId: params.userId,
     });
 
     this.logger.info({
-      message: 'Context search completed',
-      context: {
-        foundResults: contextResults.length,
-        userId: params.userId,
+      message: 'RAG orchestration complete',
+      metadata: {
+        contextFitted: ragResult.metadata.contextStats.fitted,
+        contextRetrieved: ragResult.metadata.contextStats.retrieved,
+        contextValidated: ragResult.metadata.contextStats.validated,
+        decomposed: ragResult.metadata.decomposed,
+        enhanced: ragResult.metadata.enhanced,
+        pathTaken: ragResult.pathTaken,
         query: params.query,
+        stepsExecuted: ragResult.metadata.stepsExecuted.join(' → '),
       },
     });
 
-    // Step 3: Build prompt with context
-    const prompt = this.buildPromptWithContext({
-      context: contextResults,
-      query: params.query,
-    });
-
-    // Step 4: Generate response
+    // Step 2: LLM Completion using advanced RAG prompt
     const llmResponse = await this.ollamaProvider.complete({
       maxTokens: 2048,
       model: this.llmModel,
-      prompt,
+      prompt: ragResult.builtPrompt.prompt,
       temperature: 0.7,
     });
 
-    // Step 5: Store user message
+    // Step 3: Store user message
     await this.storeMessage({
       agentType: 'orchestrator',
       content: params.query,
       requestId,
-      rootRequestId,
       role: 'user',
+      rootRequestId,
       sessionId: params.sessionId,
       userId: params.userId,
     });
 
-    // Step 6: Store agent response
+    // Step 4: Store bot response
     await this.storeMessage({
       agentType: 'orchestrator',
       content: llmResponse.text,
       requestId,
-      rootRequestId,
       role: 'bot',
+      rootRequestId,
       sessionId: params.sessionId,
       userId: params.userId,
     });
 
+    // Step 5: Background quality grading (non-blocking feedback loop)
+    this.ragService
+      .gradeResponse({
+        messageId,
+        query: params.query,
+        response: llmResponse.text,
+        retrievedContext: ragResult.builtPrompt.citations.map((c) => c.content),
+      })
+      .catch((err: unknown) => {
+        this.logger.error({
+          message: 'Background quality grading failed',
+          metadata: { error: err, messageId },
+        });
+      });
+
+    // Step 6: Calculate dynamic confidence
+    const confidence = ConfidenceCalculator.calculate({
+      citations: ragResult.builtPrompt.citations,
+      metadata: ragResult.metadata,
+    });
+
     const duration = Date.now() - startTime;
 
-    // Build result
+    // Step 7: Build result with citations
     return {
-      agentsUsed: 1, // MVP: just orchestrator
+      agentsUsed: 1,
       answer: llmResponse.text,
-      confidence: 0.8, // MVP: static confidence
-      // eslint-disable-next-line local-rules/require-typed-params, @typescript-eslint/max-params -- map callback with standard (element, index) signature
-      sources: contextResults.map((result, index) => ({
-        content: result.payload.content,
-        id: `context-${String(index)}`,
+      confidence,
+      sources: ragResult.builtPrompt.citations.map((citation) => ({
+        content: citation.content,
+        id: citation.messageId,
         metadata: {
-          agentType: result.payload.agentType,
-          role: result.payload.role,
-          timestamp: result.payload.timestamp,
+          citationId: citation.citationId,
+          relevanceScore: citation.relevanceScore,
+          timestamp: citation.timestamp,
         },
-        score: result.score,
+        score: citation.relevanceScore,
       })),
-      totalCost: 0, // MVP: no cost tracking
+      totalCost: 0,
       totalDuration: duration,
     };
-  }
-
-  /**
-   * Build prompt with context
-   */
-  private buildPromptWithContext(params: {
-    context: ContextSearchResult[];
-    query: string;
-  }): string {
-    let prompt = '';
-
-    // Add system instruction
-    prompt += 'You are a helpful AI assistant. ';
-
-    // Add context if available
-    if (params.context.length > 0) {
-      prompt +=
-        'Below is relevant conversation history for context. Use it ONLY if relevant to the current question. If the current question is about a new topic, answer it directly without referencing unrelated history.\n\n';
-      prompt += 'Previous conversation:\n';
-      for (const ctx of params.context) {
-        const role = ctx.payload.role === 'user' ? 'User' : 'Assistant';
-        prompt += `${role}: ${ctx.payload.content}\n`;
-      }
-      prompt += '\n---\n\n';
-    }
-
-    // Add current query with emphasis
-    prompt += `Current question: ${params.query}\n`;
-    prompt += 'Assistant:';
-
-    return prompt;
-  }
-
-  /**
-   * Compare two results by timestamp ascending
-   */
-  private compareByTimeAscending(params: {
-    first: ContextSearchResult;
-    second: ContextSearchResult;
-  }): number {
-    return params.first.payload.timestamp - params.second.payload.timestamp;
-  }
-
-  /**
-   * Compare two results by timestamp descending
-   */
-  private compareByTimeDescending(params: {
-    first: ContextSearchResult;
-    second: ContextSearchResult;
-  }): number {
-    return params.second.payload.timestamp - params.first.payload.timestamp;
   }
 
   /**
@@ -250,93 +238,6 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
     this.requestCounter++;
     const timestamp = Date.now();
     return `req_${String(timestamp)}.${String(this.requestCounter)}`;
-  }
-
-  /**
-   * Search for relevant context using hybrid strategy
-   */
-  private async searchRelevantContext(params: {
-    queryEmbedding: number[];
-    userId: string;
-  }): Promise<ContextSearchResult[]> {
-    // Hybrid context strategy:
-    // Combines recent messages with semantically relevant ones
-    // This ensures temporal queries like "last time" work correctly
-
-    try {
-      // Get semantic search results (top 10 by similarity)
-      const semanticResults = await this.mcpClient.searchContext({
-        limit: 20,
-        queryVector: params.queryEmbedding,
-        userId: params.userId,
-      });
-
-      const results = Array.isArray(semanticResults.results) ? semanticResults.results : [];
-
-      // Sort by timestamp descending (most recent first)
-      const sortedByTime = this.sortResultsByTimeDescending({ results });
-
-      // Take top 10: mix of recent and semantically relevant
-      // Weight: 60% recent (first 6), 40% semantic (last 4)
-      const recentResults = sortedByTime.slice(0, 6);
-      const semanticOnlyResults = results.slice(0, 4);
-
-      // Merge and deduplicate
-      const merged = [...recentResults];
-      for (const semantic of semanticOnlyResults) {
-        if (!merged.some((r) => r.id === semantic.id)) {
-          merged.push(semantic);
-        }
-      }
-
-      // Final sort by timestamp for chronological context
-      return this.sortResultsByTimeAscending({ results: merged });
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      this.logger.warn({
-        message: `Context search failed: ${errorMessage}`,
-        context: {
-          userId: params.userId,
-          vectorLength: params.queryEmbedding.length,
-        },
-      });
-      return [];
-    }
-  }
-
-  /**
-   * Sort search results by timestamp in ascending order (chronological)
-   */
-  private sortResultsByTimeAscending(params: {
-    results: ContextSearchResult[];
-  }): ContextSearchResult[] {
-    const sortedResults = [...params.results];
-    for (let i = 0; i < sortedResults.length - 1; i++) {
-      for (let j = i + 1; j < sortedResults.length; j++) {
-        this.swapIfNeeded({ array: sortedResults, compareMethod: 'ascending', indexA: i, indexB: j });
-      }
-    }
-    return sortedResults;
-  }
-
-  /**
-   * Sort search results by timestamp in descending order (most recent first)
-   */
-  private sortResultsByTimeDescending(params: {
-    results: ContextSearchResult[];
-  }): ContextSearchResult[] {
-    const sortedResults = [...params.results];
-    for (let i = 0; i < sortedResults.length - 1; i++) {
-      for (let j = i + 1; j < sortedResults.length; j++) {
-        this.swapIfNeeded({
-          array: sortedResults,
-          compareMethod: 'descending',
-          indexA: i,
-          indexB: j,
-        });
-      }
-    }
-    return sortedResults;
   }
 
   /**
@@ -384,32 +285,5 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
       rootRequestId: params.rootRequestId,
       vector: embedding,
     });
-  }
-
-  /**
-   * Swap two elements if needed based on comparison
-   */
-  private swapIfNeeded(params: {
-    array: ContextSearchResult[];
-    compareMethod: 'ascending' | 'descending';
-    indexA: number;
-    indexB: number;
-  }): void {
-    const curr = params.array[params.indexA];
-    const next = params.array[params.indexB];
-
-    if (curr === undefined || next === undefined) {
-      return;
-    }
-
-    const comparison =
-      params.compareMethod === 'ascending'
-        ? this.compareByTimeAscending({ first: curr, second: next })
-        : this.compareByTimeDescending({ first: curr, second: next });
-
-    if (comparison > 0) {
-      params.array[params.indexA] = next;
-      params.array[params.indexB] = curr;
-    }
   }
 }

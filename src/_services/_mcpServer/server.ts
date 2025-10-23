@@ -24,15 +24,10 @@ function readConfig(): {
   qdrantUrl: string;
   transport: 'stdio' | 'streamable-http';
 } {
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const transport = (process.env['TRANSPORT'] ?? 'http') as 'stdio' | 'streamable-http';
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const httpPort = Number(process.env['MCP_HTTP_PORT'] ?? '3100');
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const qdrantUrl = process.env['QDRANT_URL'] ?? 'http://qdrant:6333';
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const qdrantApiKey = process.env['QDRANT_API_KEY'];
-  // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
   const agentOrchestratorURL = process.env['AGENT_ORCHESTRATOR_URL'] ?? 'http://agent-orchestrator:3200';
 
   const config: {

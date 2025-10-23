@@ -56,7 +56,6 @@ export class Logger extends BaseLogger {
     this.metadata = params.metadata ?? {};
 
     // Read log prefix from environment or use default
-    // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
     this.prefix = process.env['LOG_PREFIX'] ?? '[ARBITER]';
 
     // Determine implementation based on environment
@@ -143,15 +142,10 @@ export class Logger extends BaseLogger {
     overrideLevel?: LogLevel | undefined;
   }): BaseLogger {
     // Read environment variables
-    // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
     const nodeEnv = process.env['NODE_ENV'] ?? 'development';
-    // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
     const logToConsole = process.env['LOG_TO_CONSOLE'] === 'true';
-    // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
     const logLevelEnv = process.env['LOG_LEVEL'];
-    // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
     const useColorsEnv = process.env['LOG_USE_COLORS'];
-    // eslint-disable-next-line local-rules/no-bracket-notation -- process.env is an index signature
     const logFormat = process.env['LOG_FORMAT'] ?? 'text';
 
     // Parse log level - handle both override and env var
@@ -210,7 +204,6 @@ export class Logger extends BaseLogger {
 
     // Serialize the error if present
     if (params.logData.error !== undefined) {
-      // eslint-disable-next-line local-rules/no-bracket-notation -- Dynamically building context object
       merged['error'] = this.serializeError({ error: params.logData.error });
     }
 

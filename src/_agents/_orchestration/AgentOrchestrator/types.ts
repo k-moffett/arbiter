@@ -93,7 +93,7 @@ export interface Source {
 export interface DecomposedQuery {
   complexity: number;
   originalQuery: string;
-  queryType: 'simple' | 'complex' | 'comparative' | 'list-building';
+  queryType: 'simple' | 'complex' | 'comparative' | 'listBuilding';
   subQueries: SubQuery[];
 }
 
@@ -105,4 +105,118 @@ export interface SubQuery {
   priority: number;
   query: string;
   suggestedTool: string;
+}
+
+/**
+ * RAG Orchestration Types
+ *
+ * Types for the advanced RAG pipeline orchestration.
+ */
+
+import type { BuiltPrompt } from './AdvancedPromptBuilder/types';
+import type { FittedContext } from './ContextWindowManager/types';
+import type { RetrievedContext } from './HybridSearchRetriever/types';
+import type { EnhancedQuery } from './QueryEnhancer/types';
+import type { QueryRoute } from './QueryRouter/types';
+import type { ValidatedContext } from './RAGValidator/types';
+import type { ToolPlan } from './ToolPlanner/types';
+
+/**
+ * RAG orchestration request
+ */
+export interface RAGOrchestrationRequest {
+  /**
+   * Message ID for tracking
+   */
+  messageId: string;
+
+  /**
+   * User query
+   */
+  query: string;
+
+  /**
+   * Session ID
+   */
+  sessionId: string;
+
+  /**
+   * User ID
+   */
+  userId: string;
+}
+
+/**
+ * RAG orchestration response
+ */
+export interface RAGOrchestrationResponse {
+  /**
+   * Built prompt ready for LLM execution
+   */
+  builtPrompt: BuiltPrompt;
+
+  /**
+   * Message ID
+   */
+  messageId: string;
+
+  /**
+   * Orchestration metadata for monitoring
+   */
+  metadata: RAGOrchestrationMetadata;
+
+  /**
+   * Path taken (fast or complex)
+   */
+  pathTaken: 'complex' | 'fast';
+}
+
+/**
+ * RAG orchestration metadata
+ */
+export interface RAGOrchestrationMetadata {
+  /**
+   * Context statistics
+   */
+  contextStats: {
+    fitted: number;
+    retrieved: number;
+    validated: number;
+  };
+
+  /**
+   * Whether query was decomposed
+   */
+  decomposed: boolean;
+
+  /**
+   * Total orchestration duration
+   */
+  duration: number;
+
+  /**
+   * Whether query was enhanced
+   */
+  enhanced: boolean;
+
+  /**
+   * Processing steps executed
+   */
+  stepsExecuted: string[];
+}
+
+/**
+ * RAG orchestration result (internal)
+ *
+ * Contains all intermediate results from the orchestration pipeline.
+ */
+export interface RAGOrchestrationResult {
+  decomposition: DecomposedQuery | null;
+  enhancement: EnhancedQuery | null;
+  fittedContext: FittedContext;
+  prompt: BuiltPrompt;
+  retrieval: RetrievedContext;
+  route: QueryRoute;
+  toolPlan: ToolPlan | null;
+  validation: ValidatedContext;
 }
