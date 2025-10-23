@@ -42,11 +42,14 @@ async function main(): Promise<void> {
   const useGradient = getEnv({ defaultValue: 'true', key: 'CLI_USE_GRADIENT' }) === 'true';
   const showStats = getEnv({ defaultValue: 'false', key: 'CLI_SHOW_STATS' }) === 'true';
   const gradientTheme = getEnv({ defaultValue: 'pastel', key: 'CLI_GRADIENT_THEME' }) as
+    | 'cyan-purple'
+    | 'fire'
     | 'gold'
-    | 'gold-black'
+    | 'gold-orange'
+    | 'ocean'
     | 'pastel';
 
-  logger.info({
+  logger.debug({
     message: 'Initializing CLI',
     context: {
       orchestratorTimeout,

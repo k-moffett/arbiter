@@ -2,8 +2,6 @@
 # Interactive terminal interface for chatting with the agent
 # Connects to existing services (no restart policy - user controlled)
 
-name: arbiter
-
 networks:
   arbiter-network:
     external: true  # Use existing network from services
@@ -47,6 +45,7 @@ services:
       - CLI_WELCOME_MESSAGE=${CLI_WELCOME_MESSAGE:-Context-Aware AI Agent}
       - CLI_USE_GRADIENT=${CLI_USE_GRADIENT:-true}
       - CLI_GRADIENT_THEME=${CLI_GRADIENT_THEME:-pastel}
+      - CLI_BANNER_FONT=${CLI_BANNER_FONT:-Small Slant}
       - CLI_SHOW_STATS=${CLI_SHOW_STATS:-false}
 
       # Terminal compatibility

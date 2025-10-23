@@ -67,6 +67,9 @@ export class CLIServiceImplementation implements CLIService {
   private readonly userId: string;
   private readonly welcomeMessage: string;
   private readonly welcomeTitle: string;
+  private bannerContent: string = '';
+  private readonly useGradient: boolean;
+  private readonly gradientTheme: 'cyan-purple' | 'fire' | 'gold' | 'gold-orange' | 'ocean' | 'pastel';
 
   constructor(params: { chatService: ChatService } & CLIConfig) {
     this.chatService = params.chatService;
@@ -76,6 +79,8 @@ export class CLIServiceImplementation implements CLIService {
     this.welcomeTitle = params.welcomeTitle ?? 'Arbiter CLI';
     this.welcomeMessage = params.welcomeMessage ?? 'Context-Aware AI Agent';
     this.showStats = params.showStats ?? false;
+    this.useGradient = params.useGradient ?? true;
+    this.gradientTheme = params.gradientTheme ?? 'pastel';
 
     // Initialize terminal detection
     const terminal = detectTerminal();
@@ -130,6 +135,12 @@ export class CLIServiceImplementation implements CLIService {
 
     this.isRunning = true;
 
+    // Enter alternate screen buffer (prevents scrollback past banner)
+    process.stdout.write('\x1b[?1049h');
+
+    // Clear screen and move cursor to top
+    process.stdout.write('\x1b[2J\x1b[H');
+
     // Create readline interface
     this.rl = readline.createInterface({
       input: process.stdin,
@@ -182,6 +193,10 @@ export class CLIServiceImplementation implements CLIService {
     }
 
     this.isRunning = false;
+
+    // Exit alternate screen buffer
+    process.stdout.write('\x1b[?1049l');
+
     this.theme.outro({ message: 'Goodbye! 👋' });
     process.exit(0);
   }
@@ -225,14 +240,12 @@ Available commands:
       title: this.welcomeTitle
     });
 
-    // Display with gradient or plain
-    if (terminal.supportsColor) {
-      // eslint-disable-next-line no-console -- CLI tool needs console output
-      console.log('\n' + asciiTitle + '\n');
-    } else {
-      // eslint-disable-next-line no-console -- CLI tool needs console output
-      console.log('\n' + asciiTitle + '\n');
-    }
+    // Store banner for redraws
+    this.bannerContent = '\n' + asciiTitle + '\n';
+
+    // Display banner
+    // eslint-disable-next-line no-console -- CLI tool needs console output
+    console.log(this.bannerContent);
 
     // Display message with Clack styling
     this.theme.info({ message: this.welcomeMessage });
@@ -303,19 +316,35 @@ Available commands:
       return '';
     }
 
-    // For narrow terminals (< 60 chars), use simple banner
+    // Check if gradient is disabled
+    if (!this.useGradient) {
+      // Return plain ASCII without gradient
+      if (params.terminalWidth < 60) {
+        return `═══ ${params.title.toUpperCase()} ═══`;
+      }
+
+      try {
+        return figlet.textSync(params.title, {
+          font: fontPreference,
+          horizontalLayout: 'fitted',
+        });
+      } catch {
+        return `═══ ${params.title.toUpperCase()} ═══`;
+      }
+    }
+
+    // For narrow terminals (< 60 chars), use simple banner with gradient
     if (params.terminalWidth < 60) {
       const simple = `═══ ${params.title.toUpperCase()} ═══`;
       const colors = this.getGradientColors();
       return gradient(colors)(simple);
     }
 
-    // Use figlet for ASCII art
+    // Use figlet for ASCII art with gradient
     try {
       const ascii = figlet.textSync(params.title, {
         font: fontPreference,
         horizontalLayout: 'fitted',
-        width: params.terminalWidth - 4,
       });
 
       // Apply gradient
@@ -342,14 +371,14 @@ Available commands:
       return [customStart, customEnd];
     }
 
-    // Otherwise use theme from environment or default
-    const theme = process.env['CLI_BANNER_GRADIENT_THEME'] ?? 'pastel';
+    // Use configured theme (not env var)
+    const theme = this.gradientTheme;
 
     const themeMap: Record<string, string[]> = {
       'cyan-purple': ['#06b6d4', '#a855f7'],
       'fire': ['#ff0000', '#ff9900'],
       'gold': ['#FFD700', '#FFA500'],
-      'gold-black': ['#FFD700', '#000000'],
+      'gold-orange': ['#FFD700', '#FF8C00'],
       'ocean': ['#0077be', '#00d4ff'],
       'pastel': ['#a8edea', '#fed6e3'],
     };
@@ -552,6 +581,23 @@ Available commands:
     // Clear screen and move cursor to top
     process.stdout.write('\x1b[2J\x1b[H');
 
+    // Redraw banner first with new width
+    const asciiTitle = this.generateAsciiTitle({
+      terminalWidth: params.width,
+      title: this.welcomeTitle
+    });
+    // eslint-disable-next-line no-console -- CLI tool needs console output
+    console.log('\n' + asciiTitle + '\n');
+
+    // Redraw info messages
+    this.theme.info({ message: this.welcomeMessage });
+    // eslint-disable-next-line no-console -- CLI tool needs console output
+    console.log('');
+    this.theme.step({ message: 'Type /help for available commands' });
+    this.theme.step({ message: 'Type /exit to quit' });
+    // eslint-disable-next-line no-console -- CLI tool needs console output
+    console.log('');
+
     // Build output for all messages
     const outputs: string[] = [];
 
@@ -568,14 +614,14 @@ Available commands:
         const colored =
           msg.role === 'assistant'
             ? this.theme.formatAgentResponse({ content: msg.content })
-            : pc.green(msg.content);
+            : msg.content;
 
         formattedContent = wrapAnsi(colored, params.width - 6, { hard: true, trim: false });
       }
 
       // Add role marker
-      const diamond = msg.role === 'assistant' ? pc.cyan('◆') : pc.green('▶');
-      outputs.push(`\n${diamond} ${formattedContent}\n`);
+      const marker = msg.role === 'assistant' ? pc.cyan('◆') : pc.dim('>');
+      outputs.push(`\n${marker} ${formattedContent}\n`);
     }
 
     // Log all messages at once
