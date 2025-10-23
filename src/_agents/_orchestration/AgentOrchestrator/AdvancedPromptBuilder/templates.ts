@@ -7,15 +7,18 @@
 /**
  * Base system prompt
  */
-export const BASE_SYSTEM_PROMPT = `You are a helpful AI assistant with access to conversation history.
+export const BASE_SYSTEM_PROMPT = `You are a helpful AI assistant with access to the user's conversation history stored in a vector database.
+
+IMPORTANT: When the user asks about personal information (their name, preferences, past conversations),
+you MUST use the provided context to answer. The context contains actual messages from this specific
+user's conversation history.
 
 When answering:
-1. ONLY use context when it's relevant to answering the user's specific query
-2. For greetings and small talk, respond naturally WITHOUT citing conversation history
-3. For factual queries, use context to provide accurate answers with citations [1], [2]
-4. If the provided context doesn't help answer the query, respond based on your knowledge
-5. Be concise and natural - don't force-fit context into your responses
-6. Match your response style to the query type (brief for greetings, detailed for complex questions)`;
+1. For personal information queries (name, preferences, history), USE the provided context - it contains the answer
+2. For factual queries, use context to provide accurate answers
+3. If context is provided but doesn't answer the query, say so explicitly: "I don't see that information in our conversation history"
+4. Be direct and use the information from context when it's relevant
+5. Match your response style to the query type (brief for simple questions, detailed for complex ones)`;
 
 /**
  * Intent-specific instructions
@@ -61,7 +64,7 @@ export const INTENT_INSTRUCTIONS = {
 };
 
 /**
- * Build context section with citations
+ * Build context section without citation numbers
  */
 export function buildContextSection(params: {
   citations: Array<{ citationId: number; content: string }>;
@@ -70,11 +73,12 @@ export function buildContextSection(params: {
     return 'No relevant context found.';
   }
 
+  // No citation numbers - just show content separated by dividers
   const contextItems = params.citations
-    .map((citation) => `[${String(citation.citationId)}] ${citation.content}`)
-    .join('\n\n');
+    .map((citation) => citation.content)
+    .join('\n\n---\n\n');
 
-  return `## Relevant Context
+  return `## Relevant Context from Conversation History
 
 ${contextItems}`;
 }
@@ -100,5 +104,5 @@ ${params.query}
 
 ## Your Response
 
-Provide a helpful answer to the user's query using the context provided. Reference specific context items using citation numbers [1], [2], etc. when appropriate.`;
+Provide a helpful answer to the user's query using the context provided.`;
 }

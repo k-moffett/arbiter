@@ -14,6 +14,13 @@ import type { HybridSearchParams, RetrievedContext } from './types';
  */
 export interface HybridSearchRetriever {
   /**
+   * Get maximum results per query from configuration
+   *
+   * @returns Maximum number of results per query
+   */
+  getMaxResultsPerQuery(): number;
+
+  /**
    * Retrieve context using hybrid search
    *
    * Executes parallel searches for all query variations (original + HyDE + expansions),

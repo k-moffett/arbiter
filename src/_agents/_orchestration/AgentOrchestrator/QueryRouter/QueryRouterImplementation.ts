@@ -248,9 +248,10 @@ export class QueryRouterImplementation implements QueryRouter {
   }): QueryRoute {
     const { classification } = params;
 
-    // Fast path criteria
+    // Fast path criteria: complexity must be BELOW threshold (not equal)
+    // This ensures queries AT the threshold use complex path with enhancement
     const isFastPath =
-      classification.complexity <= this.config.complexityThreshold &&
+      classification.complexity < this.config.complexityThreshold &&
       !this.requiresDecomposition({ query: params.query });
 
     if (isFastPath) {

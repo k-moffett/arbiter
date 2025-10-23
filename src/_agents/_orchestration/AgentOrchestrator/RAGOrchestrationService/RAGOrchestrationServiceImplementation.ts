@@ -428,20 +428,26 @@ export class RAGOrchestrationServiceImplementation {
 
   /**
    * Calculate retrieval limit based on query complexity
+   *
+   * Scales limit based on complexity, but respects configured maximum.
+   *
+   * @param complexity - Query complexity score (1-10)
+   * @param maxResults - Maximum results from configuration
+   * @returns Calculated retrieval limit
    */
-  private calculateRetrievalLimit(complexity: number): number {
+  private calculateRetrievalLimit(complexity: number, maxResults: number): number {
     // Simple queries (greetings, basic questions): minimal context
     if (complexity <= 3) {
-      return 10;
+      return Math.min(10, maxResults);
     }
 
     // Moderate queries (single-topic questions): moderate context
     if (complexity <= 6) {
-      return 30;
+      return Math.min(30, maxResults);
     }
 
-    // Complex queries (multi-part, comparative): maximum context
-    return 50;
+    // Complex queries (multi-part, comparative): use configured maximum
+    return maxResults;
   }
 
   /**
@@ -452,8 +458,9 @@ export class RAGOrchestrationServiceImplementation {
     params: RAGOrchestrationRequest;
     route: QueryRoute;
   }): Promise<RetrievedContext> {
-    // Scale retrieval limit by query complexity
-    const limit = this.calculateRetrievalLimit(opts.route.classification.complexity);
+    // Scale retrieval limit by query complexity and configured maximum
+    const maxResults = this.hybridSearchRetriever.getMaxResultsPerQuery();
+    const limit = this.calculateRetrievalLimit(opts.route.classification.complexity, maxResults);
 
     const retrievalParams: HybridSearchParams = {
       filters: {

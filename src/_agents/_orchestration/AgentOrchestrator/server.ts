@@ -14,6 +14,7 @@ import { Logger } from '../../../_shared/_infrastructure/index.js';
 import { MCPClient } from '../../_shared/_lib/MCPClient/index.js';
 import { OllamaProvider } from '../../_shared/_lib/OllamaProvider/index.js';
 import { AgentOrchestrator } from './index.js';
+import { createRAGConfigFromEnv } from './RAGComponentConfigs/index.js';
 
 const logger = new Logger({
   metadata: {
@@ -71,6 +72,7 @@ function setupServices(config: ReturnType<typeof readConfig>): {
     llmModel: config.llmModel,
     mcpClient,
     ollamaProvider,
+    ragConfig: createRAGConfigFromEnv(),
   });
 
   return { mcpClient, ollamaProvider, orchestrator };

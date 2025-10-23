@@ -153,16 +153,20 @@ services:
       - MCP_SERVER_URL=${MCP_SERVER_URL:-http://mcp-server:3100}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-180000}
-      - LLM_MODEL=${LLM_MODEL:-qwen2.5:14b}
+      - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
       - QUERY_DECOMPOSER_MODEL=${QUERY_DECOMPOSER_MODEL}
       - QUERY_ENHANCER_MODEL=${QUERY_ENHANCER_MODEL}
       - RAG_VALIDATOR_MODEL=${RAG_VALIDATOR_MODEL}
       - QUALITY_GRADER_MODEL=${QUALITY_GRADER_MODEL}
       - TOOL_PLANNER_MODEL=${TOOL_PLANNER_MODEL}
+      - QUERY_ROUTER_COMPLEXITY_THRESHOLD=${QUERY_ROUTER_COMPLEXITY_THRESHOLD:-5}
       - CONTEXT_MAX_TOKENS=${CONTEXT_MAX_TOKENS:-12288}
       - CONTEXT_MIN_RESPONSE_TOKENS=${CONTEXT_MIN_RESPONSE_TOKENS:-512}
       - CONTEXT_CHARS_PER_TOKEN=${CONTEXT_CHARS_PER_TOKEN:-4}
+      - HYBRID_SEARCH_MAX_RESULTS=${HYBRID_SEARCH_MAX_RESULTS:-50}
+      - RAG_VALIDATOR_MAX_PARALLEL=${RAG_VALIDATOR_MAX_PARALLEL:-5}
+      - RAG_VALIDATOR_MIN_SCORE=${RAG_VALIDATOR_MIN_SCORE:-0.3}
       - ORCHESTRATOR_PORT=${ORCHESTRATOR_PORT:-3200}
       - NODE_ENV=${NODE_ENV:-production}
       - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=2048}
@@ -212,17 +216,17 @@ services:
       - ollama_models:/root/.ollama
     environment:
       - OLLAMA_HOST=ollama:11434
-      - LLM_MODEL=${LLM_MODEL:-qwen2.5:14b}
+      - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
     entrypoint: /bin/sh
     command: >
       -c "
       echo 'Pulling required Ollama models...' &&
       ollama pull nomic-embed-text &&
       echo '✓ nomic-embed-text (embeddings) downloaded' &&
-      ollama pull $${LLM_MODEL:-qwen2.5:14b} &&
-      echo '✓ $${LLM_MODEL:-qwen2.5:14b} (primary LLM) downloaded' &&
-      ollama pull llama3.1:8b &&
-      echo '✓ llama3.1:8b (fallback) downloaded' &&
+      ollama pull $${LLM_MODEL:-llama3.1:8b} &&
+      echo '✓ $${LLM_MODEL:-llama3.1:8b} (primary LLM) downloaded' &&
+      ollama pull qwen2.5:14b &&
+      echo '✓ qwen2.5:14b (fallback) downloaded' &&
       ollama pull phi4:14b-q4_K_M &&
       echo '✓ phi4:14b-q4_K_M (fallback reasoning) downloaded' &&
       echo 'All models initialized successfully!'
@@ -251,7 +255,7 @@ services:
       - ./docker/scripts/ollama:/scripts:ro
     environment:
       - OLLAMA_HOST=ollama:11434
-      - LLM_MODEL=${LLM_MODEL:-qwen2.5:14b}
+      - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
     entrypoint: /bin/sh
     command: /scripts/warm-models.sh
     networks:

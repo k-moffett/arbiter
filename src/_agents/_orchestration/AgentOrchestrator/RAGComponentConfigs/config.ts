@@ -94,15 +94,15 @@ export interface RAGSystemConfig {
  */
 export const DEFAULT_RAG_CONFIG: RAGSystemConfig = {
   // Global models
-  llmModel: 'qwen2.5:14b',
+  llmModel: 'llama3.1:8b',
   embeddingModel: 'nomic-embed-text',
 
   // QueryRouter
   queryRouter: {
-    complexityThreshold: 7, // Fast path for ≤7, complex for >7
+    complexityThreshold: 5, // Fast path for ≤5, complex for >5 (enable enhancement for retrieval queries)
     decompositionThreshold: 7, // Decompose if complexity > 7
     fastPathMaxLatency: 5000, // 5 seconds max for fast path
-    hydeThreshold: 6, // Use HyDE if complexity >= 6
+    hydeThreshold: 5, // Use HyDE if complexity >= 5 (was 6, lowered for better retrieval)
   },
 
   // CacheManager
@@ -262,6 +262,12 @@ function applyHybridSearchConfigFromEnv(config: RAGSystemConfig): void {
       process.env['HYBRID_SEARCH_BM25_WEIGHT']
     );
   }
+  if (process.env['HYBRID_SEARCH_MAX_RESULTS'] !== undefined) {
+    config.hybridSearchRetriever.maxResultsPerQuery = parseInt(
+      process.env['HYBRID_SEARCH_MAX_RESULTS'],
+      10
+    );
+  }
 }
 
 /**
@@ -282,6 +288,12 @@ function applyContextWindowConfigFromEnv(config: RAGSystemConfig): void {
 function applyValidatorConfigFromEnv(config: RAGSystemConfig): void {
   if (process.env['RAG_VALIDATOR_MIN_SCORE'] !== undefined) {
     config.ragValidator.defaultMinScore = parseFloat(process.env['RAG_VALIDATOR_MIN_SCORE']);
+  }
+  if (process.env['RAG_VALIDATOR_MAX_PARALLEL'] !== undefined) {
+    config.ragValidator.maxParallelValidations = parseInt(
+      process.env['RAG_VALIDATOR_MAX_PARALLEL'],
+      10
+    );
   }
 }
 

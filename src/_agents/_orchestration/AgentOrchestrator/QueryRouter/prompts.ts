@@ -54,6 +54,18 @@ Query: "What is 2+2?"
 Query: "What did we discuss last time?"
 {"category": "temporal", "complexity": 4, "needsRetrieval": true, "confidence": 0.95}
 
+Query: "Do you remember me?"
+{"category": "retrieval-required", "complexity": 5, "needsRetrieval": true, "confidence": 0.92}
+
+Query: "What's my name?"
+{"category": "retrieval-required", "complexity": 5, "needsRetrieval": true, "confidence": 0.95}
+
+Query: "Do you know who I am?"
+{"category": "retrieval-required", "complexity": 5, "needsRetrieval": true, "confidence": 0.90}
+
+Query: "What did I tell you before?"
+{"category": "temporal", "complexity": 5, "needsRetrieval": true, "confidence": 0.93}
+
 Query: "Tell me about quantum computing"
 {"category": "semantic", "complexity": 5, "needsRetrieval": false, "confidence": 0.90}
 

@@ -40,7 +40,7 @@ EMBEDDING_MODEL=nomic-embed-text
 # Example: Use 7b for fast validation, 14b for complex reasoning
 # QUERY_DECOMPOSER_MODEL=qwen2.5:14b
 # QUERY_ENHANCER_MODEL=qwen2.5:14b
-# RAG_VALIDATOR_MODEL=qwen2.5:14b
+# RAG_VALIDATOR_MODEL=llama3.1:8b      # Use faster model for validation
 # QUALITY_GRADER_MODEL=qwen2.5:14b
 # TOOL_PLANNER_MODEL=qwen2.5:14b
 
@@ -84,6 +84,22 @@ OLLAMA_MEMORY_LIMIT=12G
 CONTEXT_MAX_TOKENS=12288        # Max tokens for retrieved context
 CONTEXT_MIN_RESPONSE_TOKENS=512 # Reserved tokens for LLM response
 CONTEXT_CHARS_PER_TOKEN=4       # Character-to-token estimation (upgrade to tiktoken later)
+
+# ==================================================================
+# RAG Performance Optimization
+# ==================================================================
+# Query Router Configuration
+# Complexity threshold: queries with complexity >5 use complex path (with HyDE + expansion)
+# Lower values = better retrieval quality, slightly higher latency
+# Higher values = faster but less accurate retrieval
+QUERY_ROUTER_COMPLEXITY_THRESHOLD=5    # Complex path for >5 (default: 5, was 7)
+
+# Hybrid Search Configuration
+HYBRID_SEARCH_MAX_RESULTS=20    # Reduce from 50 to 20 (fewer results = faster validation)
+
+# RAG Validator Configuration
+RAG_VALIDATOR_MAX_PARALLEL=15   # Validate 15 results at once (increased from 5)
+RAG_VALIDATOR_MIN_SCORE=0.15    # More permissive threshold (decreased from 0.3)
 
 # ==================================================================
 # MCP Server Configuration

@@ -89,6 +89,13 @@ export class HybridSearchRetrieverImplementation implements HybridSearchRetrieve
   }
 
   /**
+   * Get maximum results per query from configuration
+   */
+  public getMaxResultsPerQuery(): number {
+    return this.config.maxResultsPerQuery;
+  }
+
+  /**
    * Retrieve context using hybrid search
    */
   public async retrieve(params: HybridSearchParams): Promise<RetrievedContext> {
