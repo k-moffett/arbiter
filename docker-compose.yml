@@ -64,9 +64,9 @@ services:
     environment:
       - OLLAMA_HOST=0.0.0.0
       - OLLAMA_ORIGINS=*
-      - OLLAMA_NUM_PARALLEL=2
-      - OLLAMA_MAX_LOADED_MODELS=2
-      - OLLAMA_FLASH_ATTENTION=1
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-2}
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-2}
+      - OLLAMA_FLASH_ATTENTION=${OLLAMA_FLASH_ATTENTION:-1}
       - CUDA_VISIBLE_DEVICES=0
       - OLLAMA_DEBUG=${OLLAMA_DEBUG:-false}
     logging:
@@ -83,9 +83,9 @@ services:
             - driver: nvidia
               device_ids: ['0']
               capabilities: [gpu]
-          memory: 8G
+          memory: ${OLLAMA_MEMORY_RESERVATION:-8G}
         limits:
-          memory: 24G
+          memory: ${OLLAMA_MEMORY_LIMIT:-24G}
 
   # ===========================================================================
   # MCP Server - Context API
@@ -155,6 +155,14 @@ services:
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-180000}
       - LLM_MODEL=${LLM_MODEL:-qwen2.5:14b}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}
+      - QUERY_DECOMPOSER_MODEL=${QUERY_DECOMPOSER_MODEL}
+      - QUERY_ENHANCER_MODEL=${QUERY_ENHANCER_MODEL}
+      - RAG_VALIDATOR_MODEL=${RAG_VALIDATOR_MODEL}
+      - QUALITY_GRADER_MODEL=${QUALITY_GRADER_MODEL}
+      - TOOL_PLANNER_MODEL=${TOOL_PLANNER_MODEL}
+      - CONTEXT_MAX_TOKENS=${CONTEXT_MAX_TOKENS:-12288}
+      - CONTEXT_MIN_RESPONSE_TOKENS=${CONTEXT_MIN_RESPONSE_TOKENS:-512}
+      - CONTEXT_CHARS_PER_TOKEN=${CONTEXT_CHARS_PER_TOKEN:-4}
       - ORCHESTRATOR_PORT=${ORCHESTRATOR_PORT:-3200}
       - NODE_ENV=${NODE_ENV:-production}
       - NODE_OPTIONS=${NODE_OPTIONS:---max-old-space-size=2048}
@@ -190,3 +198,67 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  # ===========================================================================
+  # Ollama Model Initialization
+  # ===========================================================================
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: arbiter-ollama-init
+    depends_on:
+      ollama:
+        condition: service_started
+    volumes:
+      - ollama_models:/root/.ollama
+    environment:
+      - OLLAMA_HOST=ollama:11434
+      - LLM_MODEL=${LLM_MODEL:-qwen2.5:14b}
+    entrypoint: /bin/sh
+    command: >
+      -c "
+      echo 'Pulling required Ollama models...' &&
+      ollama pull nomic-embed-text &&
+      echo '✓ nomic-embed-text (embeddings) downloaded' &&
+      ollama pull $${LLM_MODEL:-qwen2.5:14b} &&
+      echo '✓ $${LLM_MODEL:-qwen2.5:14b} (primary LLM) downloaded' &&
+      ollama pull llama3.1:8b &&
+      echo '✓ llama3.1:8b (fallback) downloaded' &&
+      ollama pull phi4:14b-q4_K_M &&
+      echo '✓ phi4:14b-q4_K_M (fallback reasoning) downloaded' &&
+      echo 'All models initialized successfully!'
+      "
+    networks:
+      - arbiter-network
+    restart: "no"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ===========================================================================
+  # Ollama Model Warming (Always Enabled)
+  # ===========================================================================
+  ollama-warm:
+    image: curlimages/curl:latest
+    container_name: arbiter-ollama-warm
+    depends_on:
+      ollama-init:
+        condition: service_completed_successfully
+      ollama:
+        condition: service_started
+    volumes:
+      - ./docker/scripts/ollama:/scripts:ro
+    environment:
+      - OLLAMA_HOST=ollama:11434
+      - LLM_MODEL=${LLM_MODEL:-qwen2.5:14b}
+    entrypoint: /bin/sh
+    command: /scripts/warm-models.sh
+    networks:
+      - arbiter-network
+    restart: "no"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -88,7 +88,7 @@ export interface RAGSystemConfig {
  * - Complexity threshold 7 for 70/30 fast/complex split
  * - 60/40 dense/BM25 weighting for hybrid search
  * - BM25 k1=1.5, b=0.75 (Okapi BM25 standards)
- * - 24576 context token window (Qwen2.5:32b, 75% of 32K max)
+ * - 12288 context token window (Qwen2.5:14b, 75% of 16K max)
  * - 0.15 minimum relevance score (permissive for conversational context)
  * - Quality weights: 40% relevance, 30% completeness, 30% clarity
  */
@@ -118,14 +118,14 @@ export const DEFAULT_RAG_CONFIG: RAGSystemConfig = {
 
   // QueryDecomposer
   queryDecomposer: {
-    llmModel: 'qwen2.5:32b',
+    llmModel: 'qwen2.5:14b',
     maxSubQueries: 5, // Limit complexity
     temperature: 0.4, // Balance creativity and consistency
   },
 
   // QueryEnhancer
   queryEnhancer: {
-    llmModel: 'qwen2.5:32b',
+    llmModel: 'qwen2.5:14b',
     maxAlternatives: 3, // 3 alternative phrasings
     maxRelated: 2, // 2 related queries
     temperature: 0.5, // More creative for variations
@@ -148,21 +148,21 @@ export const DEFAULT_RAG_CONFIG: RAGSystemConfig = {
   // ContextWindowManager
   contextWindowManager: {
     charsPerToken: 4, // Rough estimate (upgrade to tiktoken later)
-    maxContextTokens: 24576, // Qwen2.5:32b (75% of 32K max)
+    maxContextTokens: 12288, // Qwen2.5:14b (75% of 16K max)
     minResponseTokens: 512, // Reserve for response generation
   },
 
   // RAGValidator
   ragValidator: {
     defaultMinScore: 0.15, // More permissive for conversational context (was 0.3)
-    llmModel: 'qwen2.5:32b',
+    llmModel: 'qwen2.5:14b',
     maxParallelValidations: 5, // Balance speed vs rate limits
     temperature: 0.3, // Consistent relevance scoring
   },
 
   // QualityGrader (feedback loop)
   qualityGrader: {
-    llmModel: 'qwen2.5:32b',
+    llmModel: 'qwen2.5:14b',
     temperature: 0.3, // Consistent grading
     weights: {
       clarity: 0.3, // 30% - how clear
@@ -173,7 +173,7 @@ export const DEFAULT_RAG_CONFIG: RAGSystemConfig = {
 
   // ToolPlanner
   toolPlanner: {
-    llmModel: 'qwen2.5:32b',
+    llmModel: 'qwen2.5:14b',
     maxSteps: 5, // Limit execution complexity
     temperature: 0.4, // Balance creativity and consistency
   },
@@ -201,6 +201,7 @@ export function createRAGConfigFromEnv(): RAGSystemConfig {
   applyHybridSearchConfigFromEnv(config);
   applyContextWindowConfigFromEnv(config);
   applyValidatorConfigFromEnv(config);
+  applyComponentModelConfigFromEnv(config);
 
   return config;
 }
@@ -281,5 +282,49 @@ function applyContextWindowConfigFromEnv(config: RAGSystemConfig): void {
 function applyValidatorConfigFromEnv(config: RAGSystemConfig): void {
   if (process.env['RAG_VALIDATOR_MIN_SCORE'] !== undefined) {
     config.ragValidator.defaultMinScore = parseFloat(process.env['RAG_VALIDATOR_MIN_SCORE']);
+  }
+}
+
+/**
+ * Apply component-specific model overrides from environment
+ *
+ * Each component can use a specific model via COMPONENT_NAME_MODEL env var.
+ * Falls back to LLM_MODEL if component-specific var not set.
+ * Falls back to config default if neither is set.
+ */
+function applyComponentModelConfigFromEnv(config: RAGSystemConfig): void {
+  // Query Decomposer
+  if (process.env['QUERY_DECOMPOSER_MODEL'] !== undefined) {
+    config.queryDecomposer.llmModel = process.env['QUERY_DECOMPOSER_MODEL'];
+  } else if (process.env['LLM_MODEL'] !== undefined) {
+    config.queryDecomposer.llmModel = process.env['LLM_MODEL'];
+  }
+
+  // Query Enhancer
+  if (process.env['QUERY_ENHANCER_MODEL'] !== undefined) {
+    config.queryEnhancer.llmModel = process.env['QUERY_ENHANCER_MODEL'];
+  } else if (process.env['LLM_MODEL'] !== undefined) {
+    config.queryEnhancer.llmModel = process.env['LLM_MODEL'];
+  }
+
+  // RAG Validator
+  if (process.env['RAG_VALIDATOR_MODEL'] !== undefined) {
+    config.ragValidator.llmModel = process.env['RAG_VALIDATOR_MODEL'];
+  } else if (process.env['LLM_MODEL'] !== undefined) {
+    config.ragValidator.llmModel = process.env['LLM_MODEL'];
+  }
+
+  // Quality Grader
+  if (process.env['QUALITY_GRADER_MODEL'] !== undefined) {
+    config.qualityGrader.llmModel = process.env['QUALITY_GRADER_MODEL'];
+  } else if (process.env['LLM_MODEL'] !== undefined) {
+    config.qualityGrader.llmModel = process.env['LLM_MODEL'];
+  }
+
+  // Tool Planner
+  if (process.env['TOOL_PLANNER_MODEL'] !== undefined) {
+    config.toolPlanner.llmModel = process.env['TOOL_PLANNER_MODEL'];
+  } else if (process.env['LLM_MODEL'] !== undefined) {
+    config.toolPlanner.llmModel = process.env['LLM_MODEL'];
   }
 }

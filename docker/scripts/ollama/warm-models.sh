@@ -108,7 +108,11 @@ main() {
     # Warm embedding model (most frequently used)
     warm_embedding_model "nomic-embed-text" || failed=$((failed + 1))
 
-    # Warm primary LLM (validation/fallback)
+    # Warm primary LLM (from env or default to qwen2.5:14b)
+    LLM_MODEL="${LLM_MODEL:-qwen2.5:14b}"
+    warm_model "$LLM_MODEL" "Hi" || failed=$((failed + 1))
+
+    # Warm fallback LLM models
     warm_model "llama3.1:8b" "Hi" || failed=$((failed + 1))
 
     # Warm fallback reasoning model

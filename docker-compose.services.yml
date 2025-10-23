@@ -59,11 +59,11 @@ services:
       - OLLAMA_HOST=0.0.0.0
       - OLLAMA_ORIGINS=*
       # Allow 2 parallel requests for embedding batches
-      - OLLAMA_NUM_PARALLEL=2
+      - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-2}
       # Can load 2 models simultaneously (embeddings + chat model)
-      - OLLAMA_MAX_LOADED_MODELS=2
+      - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-2}
       # Enable Flash Attention for faster inference
-      - OLLAMA_FLASH_ATTENTION=1
+      - OLLAMA_FLASH_ATTENTION=${OLLAMA_FLASH_ATTENTION:-1}
       # RTX 4070 is the first GPU (device 0)
       - CUDA_VISIBLE_DEVICES=0
       # Debug logging (set via env var, default false)
@@ -82,9 +82,9 @@ services:
             - driver: nvidia
               device_ids: ['0']  # RTX 4070
               capabilities: [gpu]
-          memory: 4G
+          memory: ${OLLAMA_MEMORY_RESERVATION:-4G}
         limits:
-          memory: 8G  # Leave headroom for vLLM
+          memory: ${OLLAMA_MEMORY_LIMIT:-12G}
 
   # ===========================================================================
   # vLLM - Primary LLM Server (Phi-4 14B) - OPTIONAL
@@ -144,8 +144,8 @@ services:
       echo 'Pulling required Ollama models...' &&
       ollama pull nomic-embed-text &&
       echo '✓ nomic-embed-text (embeddings) downloaded' &&
-      ollama pull qwen2.5:14b &&
-      echo '✓ qwen2.5:14b (primary LLM) downloaded' &&
+      ollama pull ${LLM_MODEL:-qwen2.5:14b} &&
+      echo '✓ ${LLM_MODEL:-qwen2.5:14b} (primary LLM) downloaded' &&
       ollama pull llama3.1:8b &&
       echo '✓ llama3.1:8b (fallback) downloaded' &&
       ollama pull phi4:14b-q4_K_M &&

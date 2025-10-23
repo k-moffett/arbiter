@@ -38,11 +38,11 @@ EMBEDDING_MODEL=nomic-embed-text
 # Component-specific model overrides (optional, defaults to LLM_MODEL)
 # Useful for using different model sizes for different RAG pipeline stages
 # Example: Use 7b for fast validation, 14b for complex reasoning
-QUERY_DECOMPOSER_MODEL=${LLM_MODEL}
-QUERY_ENHANCER_MODEL=${LLM_MODEL}
-RAG_VALIDATOR_MODEL=${LLM_MODEL}
-QUALITY_GRADER_MODEL=${LLM_MODEL}
-TOOL_PLANNER_MODEL=${LLM_MODEL}
+# QUERY_DECOMPOSER_MODEL=qwen2.5:14b
+# QUERY_ENHANCER_MODEL=qwen2.5:14b
+# RAG_VALIDATOR_MODEL=qwen2.5:14b
+# QUALITY_GRADER_MODEL=qwen2.5:14b
+# TOOL_PLANNER_MODEL=qwen2.5:14b
 
 # ==================================================================
 # Ollama Configuration
