@@ -5,9 +5,10 @@
  * Connects AgentOrchestrator, ChatService, and CLIService.
  */
 
+import { getEnv, getUserId } from '@shared/_utils';
+
 import { AgentOrchestratorClient } from '../../_agents/_orchestration/AgentOrchestratorClient';
 import { Logger } from '../../_shared/_infrastructure';
-import { getEnv, getUserId } from '../../_shared/utils';
 import { ChatService } from '../ChatService';
 import { CLIService } from './index';
 

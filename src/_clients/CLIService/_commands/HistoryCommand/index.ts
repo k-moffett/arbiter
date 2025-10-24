@@ -10,9 +10,9 @@
 import * as fs from 'node:fs/promises';
 
 import { Flags } from '@oclif/core';
+import { getEnv } from '@shared/_utils';
 
 import { AgentOrchestratorClient } from '../../../../_agents/_orchestration/AgentOrchestratorClient';
-import { getEnv } from '../../../../_shared/utils';
 import { ChatService } from '../../../ChatService';
 import { formatHistoryTable } from '../../_lib/Formatters';
 import { BaseCommandImplementation } from '../BaseCommand';

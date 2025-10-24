@@ -11,9 +11,9 @@
 import type { ChatService } from '../../../ChatService';
 
 import { Flags } from '@oclif/core';
+import { getEnv, getUserId } from '@shared/_utils';
 
 import { AgentOrchestratorClient } from '../../../../_agents/_orchestration/AgentOrchestratorClient';
-import { getEnv, getUserId } from '../../../../_shared/utils';
 import { ChatService as ChatServiceImpl } from '../../../ChatService';
 import { CLIServiceImplementation } from '../../CLIServiceImplementation';
 import { BaseCommandImplementation } from '../BaseCommand';
