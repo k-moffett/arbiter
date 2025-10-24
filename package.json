@@ -31,6 +31,7 @@
     "stop": "docker compose down",
     "restart": "docker compose restart",
     "rebuild": "docker compose build --no-cache && docker compose up -d",
+    "rebuild:orchestrator-cli": "docker compose build agent-orchestrator & docker compose -f docker-compose.cli.yml build cli & wait && docker compose restart agent-orchestrator",
     "// CLI": "=== CLI Client ===",
     "cli": "bash scripts/cli.sh",
     "cli:rebuild": "docker compose -f docker-compose.cli.yml build --quiet && bash scripts/cli.sh",

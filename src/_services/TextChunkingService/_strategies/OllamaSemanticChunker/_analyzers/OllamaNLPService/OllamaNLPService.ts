@@ -6,11 +6,17 @@
  */
 
 import type { JSONSchema, OllamaGenerationOptions, OllamaProvider } from './types';
+import type { BaseLogger } from '@shared/_base/BaseLogger/index.js';
+
+import { parseWithRepair } from '@shared/_utils/JsonRepair/JsonRepairImplementation.js';
 
 /**
  * Ollama NLP Service Configuration
  */
 export interface OllamaNLPServiceConfig {
+  /** Logger for repair operations */
+  logger?: BaseLogger;
+
   /** Maximum retry attempts for parsing failures */
   maxRetries?: number;
 
@@ -47,6 +53,7 @@ export interface OllamaNLPServiceConfig {
  * ```
  */
 export class OllamaNLPService {
+  private readonly logger: BaseLogger | undefined;
   private readonly maxRetries: number;
   private readonly model: string;
   private readonly ollamaProvider: OllamaProvider;
@@ -55,6 +62,7 @@ export class OllamaNLPService {
     this.model = config.model;
     this.ollamaProvider = config.ollamaProvider;
     this.maxRetries = config.maxRetries ?? 3;
+    this.logger = config.logger;
   }
 
   /**
@@ -137,7 +145,7 @@ export class OllamaNLPService {
   }
 
   /**
-   * Parse response text as JSON
+   * Parse response text as JSON with automatic repair
    */
   // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-parameters -- Generic type T provides type safety for caller
   private parseResponseWithSchema<T>(params: { format: JSONSchema; response: string }): T {
@@ -147,6 +155,18 @@ export class OllamaNLPService {
       throw new Error('No JSON object found in response');
     }
 
+    // Use JSON repair if logger is available, otherwise fallback to regular parse
+    if (this.logger !== undefined) {
+      return parseWithRepair<T>({
+        context: {
+          logger: this.logger,
+          operation: 'OllamaNLPService.parseResponseWithSchema',
+        },
+        jsonString: jsonMatch[0],
+      });
+    }
+
+    // Fallback to standard parse if no logger
     try {
       return JSON.parse(jsonMatch[0]) as T;
     } catch (error) {
@@ -276,6 +296,14 @@ export class OllamaNLPService {
     propSchema: { maximum?: number; minimum?: number; type: string };
     value: unknown;
   }): void {
+    // Handle array type specially (typeof array returns 'object')
+    if (params.propSchema.type === 'array') {
+      if (!Array.isArray(params.value)) {
+        throw new Error(`Expected array, got ${typeof params.value}`);
+      }
+      return;
+    }
+
     const actualType = typeof params.value;
     if (actualType !== params.propSchema.type) {
       throw new Error(`Expected ${params.propSchema.type}, got ${actualType}`);

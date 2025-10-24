@@ -73,8 +73,14 @@ export class TextChunkingService implements ITextChunkingService {
     try {
       return await this.semanticChunker.chunk(params);
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack : undefined;
       this.logger.error({
-        context: { error },
+        context: {
+          errorMessage,
+          errorStack,
+          errorType: error instanceof Error ? error.constructor.name : typeof error,
+        },
         message: 'Semantic chunking failed, falling back to simple chunker',
       });
       return this.chunkWithSimpleStrategy({ params });

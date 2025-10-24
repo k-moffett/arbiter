@@ -115,6 +115,9 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
     const sentences = await this.splitIntoSentences({ text: params.text });
 
     // Analyze boundaries
+    this.logger.info({
+      message: 'Starting boundary analysis',
+    });
     const sentencesWithBoundaries = await this.analyzeBoundaries({ sentences });
 
     // Create chunks based on boundaries and size constraints
@@ -145,8 +148,26 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
     sentences: Array<{ content: string; startPosition: number }>;
   }): Promise<SentenceWithBoundary[]> {
     const sentencesWithBoundaries: SentenceWithBoundary[] = [];
+    const totalSentences = params.sentences.length;
+
+    this.logger.debug({
+      context: { totalSentences },
+      message: 'Beginning boundary analysis loop',
+    });
 
     for (let i = 0; i < params.sentences.length; i++) {
+      // Log progress every 10 sentences
+      if (i > 0 && i % 10 === 0) {
+        this.logger.info({
+          context: {
+            current: i,
+            percent: Math.round((i / totalSentences) * 100),
+            total: totalSentences,
+          },
+          message: 'Boundary analysis progress',
+        });
+      }
+
       const currentSentence = params.sentences[i];
       const nextSentence = params.sentences[i + 1];
 
@@ -156,6 +177,9 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
 
       // Last sentence always has boundary score of 1.0 (end of document)
       if (nextSentence === undefined) {
+        this.logger.debug({
+          message: 'Processing final sentence',
+        });
         sentencesWithBoundaries.push({
           boundaryScore: 1.0,
           content: currentSentence.content,
@@ -163,6 +187,13 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
           startPosition: currentSentence.startPosition,
         });
         continue;
+      }
+
+      // Log first analyzer call
+      if (i === 0) {
+        this.logger.info({
+          message: 'Starting first boundary analysis with LLM analyzers',
+        });
       }
 
       // Analyze boundary with all analyzers in parallel
@@ -186,6 +217,13 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
           }),
         ]);
 
+      // Log first analyzer completion
+      if (i === 0) {
+        this.logger.info({
+          message: 'First boundary analysis complete',
+        });
+      }
+
       // Calculate weighted boundary score
       const boundaryScore = this.boundaryScorer.calculateBoundaryScore({
         discourseStrength: discourseBoundary.boundaryStrength,
@@ -201,6 +239,11 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
         startPosition: currentSentence.startPosition,
       });
     }
+
+    this.logger.info({
+      context: { totalBoundaries: sentencesWithBoundaries.length },
+      message: 'Boundary analysis complete',
+    });
 
     return sentencesWithBoundaries;
   }
@@ -445,29 +488,49 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
   private async splitIntoSentences(params: {
     text: string;
   }): Promise<Array<{ content: string; startPosition: number }>> {
+    this.logger.debug({
+      context: { textLength: params.text.length },
+      message: 'Starting sentence splitting',
+    });
+
     const sentences: Array<{ content: string; startPosition: number }> = [];
+
+    // Use split() instead of exec() loop for better performance on large texts
+    // Split on sentence boundaries while keeping the delimiter
+    const parts = params.text.split(/([.!?]+\s*)/);
+
     let position = 0;
+    let currentSentence = '';
 
-    // Simple sentence splitting (could be enhanced with NLP library)
-    const sentenceRegex = /[^.!?]+[.!?]+\s*/g;
-    let match = sentenceRegex.exec(params.text);
-
-    while (match !== null) {
-      const content = match[0].trim();
-      if (content.length > 0) {
-        sentences.push({ content, startPosition: position });
-        position += match[0].length;
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      if (part === undefined || part === '') {
+        continue;
       }
-      match = sentenceRegex.exec(params.text);
+
+      // Check if this part is a delimiter (ends with punctuation)
+      if (/^[.!?]+\s*$/.test(part)) {
+        currentSentence += part;
+        const trimmed = currentSentence.trim();
+        if (trimmed.length > 0) {
+          sentences.push({ content: trimmed, startPosition: position });
+          position += currentSentence.length;
+        }
+        currentSentence = '';
+      } else {
+        currentSentence += part;
+      }
     }
 
-    // Handle remaining text without sentence ending
-    if (position < params.text.length) {
-      const remaining = params.text.slice(position).trim();
-      if (remaining.length > 0) {
-        sentences.push({ content: remaining, startPosition: position });
-      }
+    // Handle any remaining text
+    if (currentSentence.trim().length > 0) {
+      sentences.push({ content: currentSentence.trim(), startPosition: position });
     }
+
+    this.logger.info({
+      context: { sentenceCount: sentences.length },
+      message: 'Sentence splitting complete',
+    });
 
     return sentences;
   }

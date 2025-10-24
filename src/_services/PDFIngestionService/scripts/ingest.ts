@@ -24,6 +24,7 @@ import { ConsoleLogger } from '@shared/_infrastructure/ConsoleLogger/index.js';
 
 import { QdrantClientAdapter } from '../../../_data/_repositories/QdrantClientAdapter/index.js';
 import { PdfParsePDFParser } from '../../_pdfParsers/PdfParsePDFParser/index.js';
+import { DocumentMetadataExtractorImplementation } from '../../DocumentMetadataExtractor/index.js';
 import { OllamaEmbeddingService } from '../../OllamaEmbeddingService/index.js';
 import { SimpleChunker } from '../../TextChunkingService/_strategies/SimpleChunker/index.js';
 import { TextChunkingService } from '../../TextChunkingService/index.js';
@@ -430,7 +431,7 @@ function displayWelcome(parsed: ParsedArgs): void {
   console.log('\n🚀 PDF Ingestion Service');
   console.log('========================\n');
   console.log(`📄 PDF Path: ${parsed.pdfPath ?? ''}`);
-  console.log(`🔧 Chunking Strategy: ${parsed.chunkingStrategy ?? 'simple'}`);
+  console.log(`🔧 Chunking Strategy: ${parsed.chunkingStrategy ?? 'semantic'}`);
   console.log(`🔄 Force Overwrite: ${parsed.force ? 'Yes' : 'No'}`);
   if (parsed.collectionName !== undefined) {
     console.log(`📊 Collection Name: ${parsed.collectionName} (custom)`);
@@ -441,7 +442,8 @@ function displayWelcome(parsed: ParsedArgs): void {
 /**
  * Initialize all services
  */
-function initializeServices(parsed: ParsedArgs): PDFIngestionService {
+// eslint-disable-next-line max-statements, max-lines-per-function, complexity -- Service initialization requires comprehensive setup with semantic chunking components
+async function initializeServices(parsed: ParsedArgs): Promise<PDFIngestionService> {
   const logger = new ConsoleLogger({});
 
   if (parsed.verbose) {
@@ -461,19 +463,148 @@ function initializeServices(parsed: ParsedArgs): PDFIngestionService {
 
   const pdfParser = new PdfParsePDFParser({ logger });
   const simpleChunker = new SimpleChunker({ logger });
-  const textChunker = new TextChunkingService({
-    logger,
-    simpleChunker,
+
+  // Initialize Ollama Embedding Service (needed for semantic chunking)
+  const embeddingService = new OllamaEmbeddingService();
+
+  // Initialize semantic chunker - always available with llama3.1:8b default
+  const semanticModel = process.env['OLLAMA_SEMANTIC_CHUNKER_MODEL'] ?? 'llama3.1:8b';
+  const ollamaBaseUrl = process.env['OLLAMA_BASE_URL'] ?? 'http://localhost:11434';
+
+  // Dynamic imports for semantic chunking components
+  /* eslint-disable @typescript-eslint/naming-convention, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call -- Dynamic imports require runtime loading */
+  const { OllamaProvider } = await import('../../../_agents/_shared/_lib/OllamaProvider/index.js');
+  const { OllamaNLPService } = await import(
+    '../../TextChunkingService/_strategies/OllamaSemanticChunker/_analyzers/OllamaNLPService/index.js'
+  );
+  const { loadSemanticChunkerConfig } = await import(
+    '../../TextChunkingService/_strategies/OllamaSemanticChunker/config/index.js'
+  );
+  const { OllamaSemanticChunker } = await import(
+    '../../TextChunkingService/_strategies/OllamaSemanticChunker/index.js'
+  );
+  const { OllamaTopicAnalyzer } = await import(
+    '../../TextChunkingService/_strategies/OllamaSemanticChunker/_analyzers/OllamaTopicAnalyzer/index.js'
+  );
+  const { OllamaDiscourseClassifier } = await import(
+    '../../TextChunkingService/_strategies/OllamaSemanticChunker/_analyzers/OllamaDiscourseClassifier/index.js'
+  );
+  const { OllamaStructureDetector } = await import(
+    '../../TextChunkingService/_strategies/OllamaSemanticChunker/_analyzers/OllamaStructureDetector/index.js'
+  );
+  const { OllamaBoundaryScorer } = await import(
+    '../../TextChunkingService/_strategies/OllamaSemanticChunker/_analyzers/OllamaBoundaryScorer/index.js'
+  );
+  const { OllamaTagExtractor } = await import(
+    '../../TextChunkingService/_strategies/OllamaSemanticChunker/_analyzers/OllamaTagExtractor/index.js'
+  );
+
+  const semanticChunkerConfig = loadSemanticChunkerConfig();
+
+  const ollamaProvider = new OllamaProvider({
+    baseUrl: ollamaBaseUrl,
+    model: semanticModel,
   });
 
-  // Initialize Ollama Embedding Service
-  const embeddingService = new OllamaEmbeddingService();
+  const nlpService = new OllamaNLPService({
+    logger,
+    model: semanticModel,
+    ollamaProvider,
+  });
+  /* eslint-enable @typescript-eslint/naming-convention, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
+
+  const topicAnalyzer = new OllamaTopicAnalyzer({
+    nlpService,
+    temperature: semanticChunkerConfig.temperatures.topic,
+  });
+
+  const discourseClassifier = new OllamaDiscourseClassifier({
+    nlpService,
+    temperature: semanticChunkerConfig.temperatures.discourse,
+  });
+
+  const structureDetector = new OllamaStructureDetector({
+    nlpService,
+    temperature: semanticChunkerConfig.temperatures.structure,
+  });
+
+  const tagExtractor = new OllamaTagExtractor({
+    nlpService,
+    temperature: semanticChunkerConfig.temperatures.tag,
+  });
+
+  const boundaryScorer = new OllamaBoundaryScorer({
+    weights: semanticChunkerConfig.weights,
+  });
+
+  // Create embedding adapter for semantic chunker
+  const embeddingAdapter = {
+    embed: async (params: { text: string }): Promise<number[]> => {
+      const result = await embeddingService.generateEmbedding({
+        id: 'semantic-chunk',
+        text: params.text,
+      });
+      return result.embedding;
+    },
+  };
+
+  const semanticChunker = new OllamaSemanticChunker({
+    boundaryScorer,
+    config: semanticChunkerConfig,
+    discourseClassifier,
+    embeddingService: embeddingAdapter,
+    logger,
+    structureDetector,
+    tagExtractor,
+    topicAnalyzer,
+  });
+
+  const textChunker = new TextChunkingService({
+    logger,
+    semanticChunker,
+    simpleChunker,
+  });
 
   // Initialize Metadata Validator (reads REQUIRE_DOCUMENT_METADATA from ENV)
   const enforceMetadata = process.env['REQUIRE_DOCUMENT_METADATA'] === 'true';
   const metadataValidator = new MetadataValidator({ enforceMetadata });
 
+  // Initialize Metadata Extractor if auto-extraction is enabled
+  const autoExtractMetadata = process.env['AUTO_EXTRACT_METADATA'] === 'true';
+  let documentMetadataExtractor;
+
+  if (autoExtractMetadata) {
+    const model = process.env['METADATA_EXTRACTION_MODEL'] ?? 'llama3.2:3b';
+    const extractorOllamaBaseUrl = process.env['OLLAMA_BASE_URL'] ?? 'http://localhost:11434';
+
+    /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call -- Dynamic imports used above */
+    const ollamaProvider = new OllamaProvider({
+      baseUrl: extractorOllamaBaseUrl,
+      model,
+    });
+
+    const nlpService = new OllamaNLPService({
+      logger,
+      model,
+      ollamaProvider,
+    });
+    /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
+
+    documentMetadataExtractor = new DocumentMetadataExtractorImplementation({
+      extraction: {
+        model,
+        samplePages: Number.parseInt(process.env['METADATA_EXTRACTION_SAMPLE_PAGES'] ?? '5', 10),
+        temperature: Number.parseFloat(
+          process.env['METADATA_EXTRACTION_TEMPERATURE'] ?? '0.1'
+        ),
+      },
+      nlpService,
+    });
+  }
+
   const ingestionService = new PDFIngestionService({
+    autoExtractMetadata,
+    ...(documentMetadataExtractor !== undefined ? { documentMetadataExtractor } : {}),
     embeddingService,
     logger,
     metadataValidator,
@@ -652,7 +783,7 @@ async function main(): Promise<void> {
   displayWelcome(parsed);
 
   try {
-    const ingestionService = initializeServices(parsed);
+    const ingestionService = await initializeServices(parsed);
 
     console.log('⚙️  Processing PDF...');
 

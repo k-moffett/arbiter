@@ -6,12 +6,14 @@
  */
 
 import type { QdrantClientAdapter } from '../../_data/_repositories/QdrantClientAdapter/index.js';
+import type { DocumentMetadataExtractor } from '../DocumentMetadataExtractor/index.js';
 import type { OllamaEmbeddingService } from '../OllamaEmbeddingService/index.js';
 import type { PDFParserService } from '../PDFParserService/index.js';
 import type { TextChunkingService } from '../TextChunkingService/index.js';
 import type { ChunkingStrategy, TextChunk } from '../TextChunkingService/types.js';
 import type { IngestPDFParams, IPDFIngestionService } from './interfaces.js';
 import type { PDFIngestionResult } from './types.js';
+import type { DocumentMetadata } from './types/index.js';
 import type { MetadataValidator } from './validators/index.js';
 import type { BaseLogger } from '@shared/_base/BaseLogger/index.js';
 
@@ -22,6 +24,12 @@ import { basename, extname } from 'path';
  * Constructor parameters for PDFIngestionService
  */
 export interface PDFIngestionServiceParams {
+  /** Enable automatic metadata extraction from document content */
+  autoExtractMetadata?: boolean;
+
+  /** Service for extracting metadata from document content */
+  documentMetadataExtractor?: DocumentMetadataExtractor;
+
   embeddingDimensions?: number;
   embeddingService?: OllamaEmbeddingService;
   logger: BaseLogger;
@@ -41,6 +49,8 @@ export interface PDFIngestionServiceParams {
  * 4. Store in Qdrant
  */
 export class PDFIngestionService implements IPDFIngestionService {
+  private readonly autoExtractMetadata: boolean;
+  private readonly documentMetadataExtractor: DocumentMetadataExtractor | undefined;
   private readonly embeddingDimensions: number;
   private readonly embeddingService: OllamaEmbeddingService | undefined;
   private readonly logger: BaseLogger;
@@ -56,29 +66,68 @@ export class PDFIngestionService implements IPDFIngestionService {
     this.qdrantAdapter = params.qdrantAdapter;
     this.embeddingService = params.embeddingService;
     this.metadataValidator = params.metadataValidator;
+    this.documentMetadataExtractor = params.documentMetadataExtractor;
+    this.autoExtractMetadata = params.autoExtractMetadata ?? false;
     this.embeddingDimensions = params.embeddingDimensions ?? 768;
   }
 
   /**
    * Ingest a PDF file into Qdrant
    */
-  // eslint-disable-next-line max-statements -- Sequential ingestion workflow requires comprehensive step-by-step processing
+  // eslint-disable-next-line max-statements, max-lines-per-function, complexity -- Sequential ingestion workflow requires comprehensive step-by-step processing
   public async ingest(params: IngestPDFParams): Promise<PDFIngestionResult> {
     const { chunkingStrategy = 'simple', force = false, pdfPath } = params;
 
     try {
       this.logger.info({ message: 'Starting PDF ingestion', context: { pdfPath, chunkingStrategy } });
 
-      // Validate metadata if validator is configured
-      if (this.metadataValidator !== undefined) {
-        this.metadataValidator.validate(params.metadata);
-        this.logger.debug({ message: 'Document metadata validated' });
-      }
-
       const parseResult = await this.pdfParser.parse({ input: pdfPath });
 
       if (parseResult.text === undefined) {
         throw new Error('No text extracted from PDF');
+      }
+
+      // Extract and merge metadata
+      let finalMetadata = params.metadata;
+
+      // Auto-extract metadata if enabled and extractor is configured
+      const shouldExtractMetadata =
+        this.autoExtractMetadata &&
+        this.documentMetadataExtractor !== undefined &&
+        params.metadata === undefined;
+
+       
+      if (shouldExtractMetadata) {
+        this.logger.info({ message: 'Extracting metadata from document content' });
+
+        const extractionResult = await this.documentMetadataExtractor.extract({
+          text: parseResult.text,
+        });
+
+        finalMetadata = extractionResult.metadata;
+
+        this.logger.info({
+          message: 'Metadata extracted successfully',
+          context: {
+            title: extractionResult.metadata.title,
+            confidence: extractionResult.confidence,
+          },
+        });
+      }
+
+      // Merge CLI-provided metadata with extracted metadata (CLI wins)
+      if (params.metadata !== undefined && finalMetadata !== undefined) {
+        finalMetadata = this.mergeMetadata({
+          base: finalMetadata,
+          override: params.metadata,
+        });
+        this.logger.debug({ message: 'Merged CLI metadata with extracted metadata' });
+      }
+
+      // Validate final metadata if validator is configured
+      if (this.metadataValidator !== undefined) {
+        this.metadataValidator.validate(finalMetadata);
+        this.logger.debug({ message: 'Document metadata validated' });
       }
 
       const filename = basename(pdfPath);
@@ -325,6 +374,30 @@ export class PDFIngestionService implements IPDFIngestionService {
     const host = process.env['QDRANT_HOST'] ?? 'localhost';
     const port = process.env['QDRANT_PORT'] ?? '6333';
     return `http://${host}:${port}`;
+  }
+
+  /**
+   * Merge metadata with override taking precedence
+   *
+   * Arrays (tags) are concatenated and deduplicated.
+   * All other fields from override replace base values.
+   */
+  private mergeMetadata(params: {
+    base: Partial<DocumentMetadata>;
+    override: Partial<DocumentMetadata>;
+  }): DocumentMetadata {
+    const merged: Partial<DocumentMetadata> = {
+      ...params.base,
+      ...params.override,
+    };
+
+    // Merge and deduplicate tags arrays
+    if (params.base.tags !== undefined && params.override.tags !== undefined) {
+      const combinedTags = [...params.base.tags, ...params.override.tags];
+      merged.tags = [...new Set(combinedTags)];
+    }
+
+    return merged as DocumentMetadata;
   }
 
   /**
