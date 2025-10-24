@@ -298,6 +298,13 @@ function applyValidatorConfigFromEnv(config: RAGSystemConfig): void {
 }
 
 /**
+ * Get model from environment with fallback logic
+ */
+function getModelFromEnv(params: { componentEnvVar: string }): string | null {
+  return process.env[params.componentEnvVar] ?? process.env['LLM_MODEL'] ?? null;
+}
+
+/**
  * Apply component-specific model overrides from environment
  *
  * Each component can use a specific model via COMPONENT_NAME_MODEL env var.
@@ -305,38 +312,28 @@ function applyValidatorConfigFromEnv(config: RAGSystemConfig): void {
  * Falls back to config default if neither is set.
  */
 function applyComponentModelConfigFromEnv(config: RAGSystemConfig): void {
-  // Query Decomposer
-  if (process.env['QUERY_DECOMPOSER_MODEL'] !== undefined) {
-    config.queryDecomposer.llmModel = process.env['QUERY_DECOMPOSER_MODEL'];
-  } else if (process.env['LLM_MODEL'] !== undefined) {
-    config.queryDecomposer.llmModel = process.env['LLM_MODEL'];
+  const decomposerModel = getModelFromEnv({ componentEnvVar: 'QUERY_DECOMPOSER_MODEL' });
+  if (decomposerModel !== null) {
+    config.queryDecomposer.llmModel = decomposerModel;
   }
 
-  // Query Enhancer
-  if (process.env['QUERY_ENHANCER_MODEL'] !== undefined) {
-    config.queryEnhancer.llmModel = process.env['QUERY_ENHANCER_MODEL'];
-  } else if (process.env['LLM_MODEL'] !== undefined) {
-    config.queryEnhancer.llmModel = process.env['LLM_MODEL'];
+  const enhancerModel = getModelFromEnv({ componentEnvVar: 'QUERY_ENHANCER_MODEL' });
+  if (enhancerModel !== null) {
+    config.queryEnhancer.llmModel = enhancerModel;
   }
 
-  // RAG Validator
-  if (process.env['RAG_VALIDATOR_MODEL'] !== undefined) {
-    config.ragValidator.llmModel = process.env['RAG_VALIDATOR_MODEL'];
-  } else if (process.env['LLM_MODEL'] !== undefined) {
-    config.ragValidator.llmModel = process.env['LLM_MODEL'];
+  const validatorModel = getModelFromEnv({ componentEnvVar: 'RAG_VALIDATOR_MODEL' });
+  if (validatorModel !== null) {
+    config.ragValidator.llmModel = validatorModel;
   }
 
-  // Quality Grader
-  if (process.env['QUALITY_GRADER_MODEL'] !== undefined) {
-    config.qualityGrader.llmModel = process.env['QUALITY_GRADER_MODEL'];
-  } else if (process.env['LLM_MODEL'] !== undefined) {
-    config.qualityGrader.llmModel = process.env['LLM_MODEL'];
+  const graderModel = getModelFromEnv({ componentEnvVar: 'QUALITY_GRADER_MODEL' });
+  if (graderModel !== null) {
+    config.qualityGrader.llmModel = graderModel;
   }
 
-  // Tool Planner
-  if (process.env['TOOL_PLANNER_MODEL'] !== undefined) {
-    config.toolPlanner.llmModel = process.env['TOOL_PLANNER_MODEL'];
-  } else if (process.env['LLM_MODEL'] !== undefined) {
-    config.toolPlanner.llmModel = process.env['LLM_MODEL'];
+  const plannerModel = getModelFromEnv({ componentEnvVar: 'TOOL_PLANNER_MODEL' });
+  if (plannerModel !== null) {
+    config.toolPlanner.llmModel = plannerModel;
   }
 }

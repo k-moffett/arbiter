@@ -9,6 +9,7 @@ import type { ContextPayload } from '../../../_services/_mcpServer/ContextToolRe
 import type { MCPClient } from '../../_shared/_lib/MCPClient';
 import type { CompletionParams, EmbedParams, LLMResponse } from '../../_shared/types';
 import type { AgentOrchestrator } from './interfaces';
+import type { PersonalityProvider } from './PersonalityProvider';
 import type { RAGSystemConfig } from './RAGComponentConfigs';
 import type { QueryResult } from './types';
 
@@ -16,6 +17,7 @@ import { randomUUID } from 'node:crypto';
 
 import { Logger } from '../../../_shared/_infrastructure';
 import { ConfidenceCalculator } from './ConfidenceCalculator';
+import { PersonalityProviderImplementation } from './PersonalityProvider';
 import { DEFAULT_RAG_CONFIG } from './RAGComponentConfigs';
 import { RAGComponentFactory } from './RAGComponentFactory';
 import { RAGOrchestrationService } from './RAGOrchestrationService';
@@ -38,6 +40,8 @@ export interface AgentOrchestratorConfig {
     embed(params: EmbedParams): Promise<number[]>;
     health(): Promise<boolean>;
   };
+  /** Personality provider for dynamic personality system (optional, defaults to 'none') */
+  personalityProvider?: PersonalityProvider;
   /** RAG system configuration (optional, uses defaults if not provided) */
   ragConfig?: RAGSystemConfig;
 }
@@ -67,8 +71,10 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
   private readonly logger: Logger;
   private readonly mcpClient: MCPClient;
   private readonly ollamaProvider: AgentOrchestratorConfig['ollamaProvider'];
+  private readonly personalityProvider: PersonalityProvider;
   private readonly ragService: RAGOrchestrationService;
   private requestCounter: number = 0;
+  private readonly sessionFirstMessages: Set<string> = new Set();
   private readonly startTime: number;
 
   constructor(config: AgentOrchestratorConfig) {
@@ -83,6 +89,13 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
         serviceName: 'Agent Orchestrator',
       },
     });
+
+    // Initialize PersonalityProvider with default fallback
+    this.personalityProvider =
+      config.personalityProvider ??
+      new PersonalityProviderImplementation({
+        config: { personalityType: 'none' },
+      });
 
     // Initialize RAG system with all components
     const ragConfig = config.ragConfig ?? DEFAULT_RAG_CONFIG;
@@ -136,13 +149,23 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
     const rootRequestId = requestId;
     const messageId = randomUUID();
 
-    // Step 1: RAG Orchestration (all advanced RAG components)
-    const ragResult = await this.ragService.orchestrate({
-      messageId,
-      query: params.query,
+    // Handle personality and first message logic
+    const { isFirstMessage, userName } = await this.handlePersonalityContext({
       sessionId: params.sessionId,
       userId: params.userId,
     });
+
+    // Step 1: RAG Orchestration (all advanced RAG components)
+    const ragResult = await this.ragService.orchestrate(
+      this.buildRAGOrchestrationRequest({
+        isFirstMessage,
+        messageId,
+        query: params.query,
+        sessionId: params.sessionId,
+        userId: params.userId,
+        userName,
+      })
+    );
 
     this.logger.info({
       message: 'RAG orchestration complete',
@@ -212,6 +235,7 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
     const duration = Date.now() - startTime;
 
     // Step 7: Build result with citations
+    // Note: LLM generates welcome message naturally based on prompt instructions
     return {
       agentsUsed: 1,
       answer: llmResponse.text,
@@ -232,12 +256,143 @@ export class AgentOrchestratorImplementation implements AgentOrchestrator {
   }
 
   /**
+   * Build RAG orchestration request with personality
+   */
+  private buildRAGOrchestrationRequest(params: {
+    isFirstMessage: boolean;
+    messageId: string;
+    query: string;
+    sessionId: string;
+    userId: string;
+    userName: string | undefined;
+  }): import('./types').RAGOrchestrationRequest {
+    const request: import('./types').RAGOrchestrationRequest = {
+      messageId: params.messageId,
+      query: params.query,
+      sessionId: params.sessionId,
+      userId: params.userId,
+    };
+
+    // Add personality prompt only if should be applied for this interaction
+    const shouldApply = this.personalityProvider.shouldApplyPersonality({
+      isFirstMessage: params.isFirstMessage,
+    });
+    if (shouldApply) {
+      const personalityPrompt =
+        this.personalityProvider.getPersonalityPrompt().systemPromptAddition;
+      if (personalityPrompt !== '') {
+        request.personalityPrompt = personalityPrompt;
+      }
+    }
+
+    // Add first message flag
+    if (params.isFirstMessage) {
+      request.isFirstMessage = params.isFirstMessage;
+    }
+
+    // Add user name if discovered
+    if (params.userName !== undefined) {
+      request.userName = params.userName;
+    }
+
+    return request;
+  }
+
+  /**
    * Generate hierarchical request ID
    */
   private generateRequestId(): string {
     this.requestCounter++;
     const timestamp = Date.now();
     return `req_${String(timestamp)}.${String(this.requestCounter)}`;
+  }
+
+  /**
+   * Handle personality context and first message detection
+   */
+  private async handlePersonalityContext(params: {
+    sessionId: string;
+    userId: string;
+  }): Promise<{ isFirstMessage: boolean; userName: string | undefined }> {
+    // Detect first message for this session
+    const isFirstMessage = !this.sessionFirstMessages.has(params.sessionId);
+    if (isFirstMessage) {
+      this.sessionFirstMessages.add(params.sessionId);
+    }
+
+    // Search for user preferences on first message (if personality is active)
+    let userName: string | undefined;
+    if (this.personalityProvider.shouldSearchForPreferences({ isFirstMessage })) {
+      const preferences = await this.searchForUserPreferences({
+        sessionId: params.sessionId,
+        userId: params.userId,
+      });
+      userName = preferences.userName;
+    }
+
+    return { isFirstMessage, userName };
+  }
+
+  /**
+   * Search for user preferences in conversation history
+   *
+   * Searches for user's name and preferences from previous conversations.
+   * Called only on first message of a session when personality is active.
+   */
+  private async searchForUserPreferences(params: {
+    sessionId: string;
+    userId: string;
+  }): Promise<{ userName?: string }> {
+    try {
+      // Search conversation history for user introductions
+      // More specific query to find messages where user states their name
+      const query = 'user introduction my name';
+
+      // Generate embedding for search query
+      const embedding = await this.ollamaProvider.embed({
+        model: this.embeddingModel,
+        text: query,
+      });
+
+      // Search via MCP client with increased limit to capture more history
+      const searchResult = await this.mcpClient.searchContext({
+        limit: 30,
+        query,
+        queryVector: embedding,
+        userId: params.userId,
+      });
+
+      // Extract user name from results if available
+      // Expanded patterns to capture more name variations
+      // Captures single or multi-word names (e.g., "John" or "John Smith")
+      const namePattern =
+        /(?:my name is|my name's|I'm|I am|call me|this is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i;
+
+      for (const result of searchResult.results) {
+        const match = result.payload.content.match(namePattern);
+        const extractedName = match?.[1];
+
+        if (extractedName !== undefined) {
+          this.logger.debug({
+            message: 'Found user name in conversation history',
+            metadata: { userName: extractedName },
+          });
+          return { userName: extractedName };
+        }
+      }
+
+      this.logger.debug({
+        message: 'No user name found in conversation history',
+        metadata: { resultsSearched: searchResult.results.length },
+      });
+      return {};
+    } catch (error) {
+      this.logger.error({
+        message: 'Failed to search for user preferences',
+        metadata: { error, sessionId: params.sessionId },
+      });
+      return {};
+    }
   }
 
   /**

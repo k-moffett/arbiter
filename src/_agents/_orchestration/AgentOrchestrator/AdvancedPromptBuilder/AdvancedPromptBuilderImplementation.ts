@@ -66,17 +66,38 @@ export class AdvancedPromptBuilderImplementation implements AdvancedPromptBuilde
     });
 
     // Get intent-specific instructions
-    const intentInstructions = this.getIntentInstructions({
+    let intentInstructions = this.getIntentInstructions({
       customInstructions: params.instructions,
       queryIntent: params.queryIntent,
     });
+
+    // Add first message greeting instructions if applicable
+    if (params.isFirstMessage === true) {
+      const greetingInstruction =
+        '\n\n**IMPORTANT**: This is the user\'s first message in this session. Generate a personality-appropriate greeting before responding to their query. Output ONLY the greeting and response - do NOT include any meta-commentary, notes, or explanations about your thought process.';
+      intentInstructions =
+        intentInstructions !== '' ? intentInstructions + greetingInstruction : greetingInstruction;
+    }
+
+    // Add user name context if discovered
+    if (params.userName !== undefined && params.userName !== '') {
+      const nameInstruction = `\n\nThe user's name is ${params.userName}. Use it naturally in your response.`;
+      intentInstructions =
+        intentInstructions !== '' ? intentInstructions + nameInstruction : nameInstruction;
+    }
+
+    // Combine base system prompt with personality (if provided)
+    const systemPrompt =
+      params.personalityPrompt !== undefined && params.personalityPrompt !== ''
+        ? `${BASE_SYSTEM_PROMPT}\n\n${params.personalityPrompt}`
+        : BASE_SYSTEM_PROMPT;
 
     // Build full prompt
     const prompt = buildFullPrompt({
       contextSection,
       intentInstructions,
       query: params.query,
-      systemPrompt: BASE_SYSTEM_PROMPT,
+      systemPrompt,
     });
 
     // Estimate tokens

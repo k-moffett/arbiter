@@ -180,11 +180,16 @@ export class ClackThemeImplementation implements ClackTheme {
    * Apply gradient to text based on theme
    */
   private applyGradient(params: { text: string }): string {
-    const gradients = {
-      gold: ['#FFD700', '#FFA500'],
-      'gold-black': ['#FFD700', '#000000'],
-      pastel: ['#a8edea', '#fed6e3'],
+    /* eslint-disable @typescript-eslint/naming-convention -- Theme names with hyphens are intentional */
+    const gradients: Record<import('../../types').GradientTheme, string[]> = {
+      'cyan-purple': ['#06b6d4', '#a855f7'],
+      'fire': ['#ff0000', '#ff9900'],
+      'gold': ['#FFD700', '#FFA500'],
+      'gold-orange': ['#FFD700', '#FF8C00'],
+      'ocean': ['#0077be', '#00d4ff'],
+      'pastel': ['#a8edea', '#fed6e3'],
     };
+    /* eslint-enable @typescript-eslint/naming-convention */
 
     const colors = gradients[this.config.gradientTheme];
     return gradient(colors)(params.text);
@@ -194,11 +199,16 @@ export class ClackThemeImplementation implements ClackTheme {
    * Get theme-specific accent color function
    */
   private getAccentColor(): (text: string) => string {
-    const colors = {
-      gold: pc.yellow,
-      'gold-black': pc.yellow,
-      pastel: pc.cyan,
+    /* eslint-disable @typescript-eslint/naming-convention -- Theme names with hyphens are intentional */
+    const colors: Record<import('../../types').GradientTheme, (text: string) => string> = {
+      'cyan-purple': pc.cyan,
+      'fire': pc.red,
+      'gold': pc.yellow,
+      'gold-orange': pc.yellow,
+      'ocean': pc.blue,
+      'pastel': pc.cyan,
     };
+    /* eslint-enable @typescript-eslint/naming-convention */
 
     return colors[this.config.gradientTheme];
   }
@@ -207,11 +217,16 @@ export class ClackThemeImplementation implements ClackTheme {
    * Get theme-specific message color function
    */
   private getMessageColor(): (text: string) => string {
-    const colors = {
-      gold: pc.yellow,
-      'gold-black': pc.yellow,
-      pastel: pc.cyan,
+    /* eslint-disable @typescript-eslint/naming-convention -- Theme names with hyphens are intentional */
+    const colors: Record<import('../../types').GradientTheme, (text: string) => string> = {
+      'cyan-purple': pc.cyan,
+      'fire': pc.red,
+      'gold': pc.yellow,
+      'gold-orange': pc.yellow,
+      'ocean': pc.blue,
+      'pastel': pc.cyan,
     };
+    /* eslint-enable @typescript-eslint/naming-convention */
 
     return colors[this.config.gradientTheme];
   }

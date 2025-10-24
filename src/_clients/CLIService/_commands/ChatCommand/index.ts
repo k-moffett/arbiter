@@ -63,8 +63,8 @@ export default class ChatCommand extends BaseCommandImplementation {
     }),
     theme: Flags.string({
       default: 'pastel',
-      description: 'Color theme (pastel, gold, gold-black)',
-      options: ['pastel', 'gold', 'gold-black'],
+      description: 'Color theme (pastel, gold, gold-orange, ocean, cyan-purple, fire)',
+      options: ['pastel', 'gold', 'gold-orange', 'ocean', 'cyan-purple', 'fire'],
     }),
   };
 
@@ -112,7 +112,7 @@ export default class ChatCommand extends BaseCommandImplementation {
     const cli = new CLIServiceImplementation({
       chatService,
       debug: flags.debug,
-      gradientTheme: flags.theme as 'pastel' | 'gold' | 'gold-black',
+      gradientTheme: flags.theme as import('../../types').GradientTheme,
       sessionId,
       showStats: flags.stats,
       userId,

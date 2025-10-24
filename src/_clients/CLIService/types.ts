@@ -7,7 +7,13 @@
 /**
  * Available gradient themes for CLI banner
  */
-export type GradientTheme = 'pastel' | 'gold-black' | 'gold';
+export type GradientTheme =
+  | 'cyan-purple'
+  | 'fire'
+  | 'gold'
+  | 'gold-orange'
+  | 'ocean'
+  | 'pastel';
 
 /**
  * CLI configuration

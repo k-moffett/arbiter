@@ -66,6 +66,18 @@ export interface PromptBuildParams {
   instructions?: string;
 
   /**
+   * Whether this is the user's first message in the session
+   * If true, adds instruction for LLM to generate a personality-appropriate greeting
+   */
+  isFirstMessage?: boolean;
+
+  /**
+   * Personality-specific system prompt addition
+   * Will be appended to base system prompt if provided
+   */
+  personalityPrompt?: string;
+
+  /**
    * Original user query
    */
   query: string;
@@ -74,6 +86,12 @@ export interface PromptBuildParams {
    * Query intent type (affects prompt structure)
    */
   queryIntent?: 'comparative' | 'factual' | 'hybrid' | 'listBuilding' | 'semantic' | 'temporal';
+
+  /**
+   * Discovered user name from conversation history
+   * Passed to LLM so it can use it naturally in responses
+   */
+  userName?: string;
 
   /**
    * Validated context results

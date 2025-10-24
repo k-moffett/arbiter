@@ -12,6 +12,8 @@
  * Dependency Inversion: Depends on abstractions (ChatService, ClackTheme, MarkdownRenderer)
  */
 
+/* eslint-disable max-lines -- CLI implementation requires comprehensive feature set for user interaction */
+
 import type { ChatMessage, ChatService } from '../ChatService';
 import type { ClackTheme } from './_lib/ClackTheme';
 import type { ConversationBuffer } from './_lib/ConversationBuffer';
@@ -50,9 +52,11 @@ import { NonBlockingSpinnerImplementation } from './_lib/NonBlockingSpinner';
  */
 // eslint-disable-next-line local-rules/max-class-properties -- Need conversation buffer and resize state for dynamic text reflow
 export class CLIServiceImplementation implements CLIService {
+  private bannerContent: string = '';
   private readonly chatService: ChatService;
   private readonly conversationBuffer: ConversationBuffer;
   private debugMode: boolean;
+  private readonly gradientTheme: import('./types').GradientTheme;
   private isRedrawing: boolean = false;
   private isRunning: boolean = false;
   private readonly logger: Logger;
@@ -64,12 +68,10 @@ export class CLIServiceImplementation implements CLIService {
   private readonly spinner: NonBlockingSpinner;
   private readonly theme: ClackTheme;
   private totalResponseTime: number = 0;
+  private readonly useGradient: boolean;
   private readonly userId: string;
   private readonly welcomeMessage: string;
   private readonly welcomeTitle: string;
-  private bannerContent: string = '';
-  private readonly useGradient: boolean;
-  private readonly gradientTheme: 'cyan-purple' | 'fire' | 'gold' | 'gold-orange' | 'ocean' | 'pastel';
 
   constructor(params: { chatService: ChatService } & CLIConfig) {
     this.chatService = params.chatService;
@@ -127,7 +129,6 @@ export class CLIServiceImplementation implements CLIService {
   /**
    * Start CLI interactive session
    */
-  // eslint-disable-next-line @typescript-eslint/require-await -- Interface requires Promise return type
   public async start(): Promise<void> {
     if (this.isRunning) {
       throw new Error('CLI is already running');
@@ -156,6 +157,9 @@ export class CLIServiceImplementation implements CLIService {
 
     // Display welcome message
     this.displayWelcome();
+
+    // Send initial greeting to trigger personality welcome
+    await this.sendInitialGreeting();
 
     // Start reading input
     this.rl.prompt();
@@ -374,6 +378,8 @@ Available commands:
     // Use configured theme (not env var)
     const theme = this.gradientTheme;
 
+    // Gradient theme color mappings (object keys match theme names)
+    /* eslint-disable @typescript-eslint/naming-convention -- Theme names with hyphens are intentional */
     const themeMap: Record<string, string[]> = {
       'cyan-purple': ['#06b6d4', '#a855f7'],
       'fire': ['#ff0000', '#ff9900'],
@@ -382,6 +388,7 @@ Available commands:
       'ocean': ['#0077be', '#00d4ff'],
       'pastel': ['#a8edea', '#fed6e3'],
     };
+    /* eslint-enable @typescript-eslint/naming-convention */
 
     // Return theme colors or default to pastel
     const pastelColors: [string, string] = ['#a8edea', '#fed6e3'];
@@ -627,5 +634,43 @@ Available commands:
     // Log all messages at once
     // eslint-disable-next-line no-console -- CLI tool needs console output
     console.log(outputs.join(''));
+  }
+
+  /**
+   * Send initial greeting to trigger personality welcome
+   * This happens automatically on CLI startup without user input
+   */
+  private async sendInitialGreeting(): Promise<void> {
+    try {
+      // Send greeting query to trigger personality welcome
+      // Using "/greeting" as a special marker that won't pollute conversation history
+      const result = await this.chatService.sendMessage({
+        message: '/greeting',
+        sessionId: this.sessionId,
+      });
+
+      // Display the personality welcome response
+      // Don't add the "/greeting" query to conversation buffer
+      // Only add the assistant's response for context
+      this.conversationBuffer.addMessage({
+        content: result.botMessage.content,
+        role: 'assistant',
+      });
+
+      // Format and display the welcome response
+      const formattedResponse = this.formatResponse({
+        duration: result.duration,
+        message: result.botMessage,
+      });
+
+      // eslint-disable-next-line no-console -- CLI tool needs console output
+      console.log(formattedResponse);
+    } catch (error) {
+      // Silently fail - don't block CLI startup if greeting fails
+      this.logger.error({
+        error: error instanceof Error ? error : new Error(String(error)),
+        message: 'Failed to send initial greeting',
+      });
+    }
   }
 }

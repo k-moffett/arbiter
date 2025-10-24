@@ -15,6 +15,8 @@
  * 8. Background: Grade quality (feedback loop, async)
  */
 
+/* eslint-disable max-lines -- RAG orchestration requires comprehensive integration of multiple components and dual-path architecture */
+
 import type { Logger } from '../../../../_shared/_infrastructure';
 import type { AdvancedPromptBuilder } from '../AdvancedPromptBuilder';
 import type { BuiltPrompt, PromptBuildParams } from '../AdvancedPromptBuilder/types';
@@ -172,63 +174,7 @@ export class RAGOrchestrationServiceImplementation {
 
     // Early exit for queries that don't need retrieval (e.g., greetings)
     if (!route.classification.needsRetrieval) {
-      this.logger.debug({
-        message: 'Skipping retrieval - query does not require context',
-        metadata: {
-          category: route.classification.category,
-          complexity: route.classification.complexity,
-        },
-      });
-
-      stepsExecuted.push('build_prompt');
-      const prompt = this.buildPromptWithoutContext({ params, route });
-      const duration = Date.now() - startTime;
-
-      this.logOrchestrationComplete({
-        contextFitted: 0,
-        duration,
-        pathTaken: route.path,
-        stepsExecuted,
-      });
-
-      return this.createResponse({
-        decomposition: null,
-        duration,
-        enhancement: null,
-        fittedContext: {
-          includedCount: 0,
-          includedResults: [],
-          truncatedCount: 0,
-        },
-        params,
-        pathTaken: route.path,
-        prompt,
-        retrieval: {
-          count: 0,
-          results: [],
-          retrievalMetadata: {
-            alternativesCount: 0,
-            filtersApplied: [],
-            relatedCount: 0,
-            retrievalDuration: 0,
-            totalDocumentsSearched: 0,
-            usedHyDE: false,
-          },
-        },
-        stepsExecuted,
-        validation: {
-          rejectedCount: 0,
-          validCount: 0,
-          validResults: [],
-          validationMetadata: {
-            avgValidationScore: 0,
-            failedCount: 0,
-            passedCount: 0,
-            totalResults: 0,
-            validationDuration: 0,
-          },
-        },
-      });
+      return this.handleNoRetrievalPath({ params, route, startTime, stepsExecuted });
     }
 
     const enhancement = await this.executeEnhancement({
@@ -292,27 +238,6 @@ export class RAGOrchestrationServiceImplementation {
   }
 
   /**
-   * Build prompt without context (for conversational queries)
-   */
-  private buildPromptWithoutContext(opts: {
-    params: RAGOrchestrationRequest;
-    route: QueryRoute;
-  }): BuiltPrompt {
-    return this.advancedPromptBuilder.buildPrompt({
-      query: opts.params.query,
-      queryIntent: opts.route.classification.category as
-        | 'comparative'
-        | 'conversational'
-        | 'factual'
-        | 'hybrid'
-        | 'listBuilding'
-        | 'semantic'
-        | 'temporal',
-      validatedResults: [],
-    });
-  }
-
-  /**
    * Build final prompt with context
    */
   private buildFinalPrompt(opts: {
@@ -329,9 +254,23 @@ export class RAGOrchestrationServiceImplementation {
       ),
     };
 
+    // Add personality prompt only if present
+    if (opts.params.personalityPrompt !== undefined) {
+      promptParams.personalityPrompt = opts.params.personalityPrompt;
+    }
+
+    // Add first message flag if present
+    if (opts.params.isFirstMessage !== undefined) {
+      promptParams.isFirstMessage = opts.params.isFirstMessage;
+    }
+
+    // Add user name if discovered
+    if (opts.params.userName !== undefined) {
+      promptParams.userName = opts.params.userName;
+    }
+
     const validIntents = [
       'comparative',
-      'conversational',
       'factual',
       'hybrid',
       'listBuilding',
@@ -341,7 +280,6 @@ export class RAGOrchestrationServiceImplementation {
     if (validIntents.includes(opts.route.classification.category)) {
       promptParams.queryIntent = opts.route.classification.category as
         | 'comparative'
-        | 'conversational'
         | 'factual'
         | 'hybrid'
         | 'listBuilding'
@@ -350,6 +288,78 @@ export class RAGOrchestrationServiceImplementation {
     }
 
     return this.advancedPromptBuilder.buildPrompt(promptParams);
+  }
+
+  /**
+   * Build prompt without context (for conversational queries)
+   */
+  private buildPromptWithoutContext(opts: {
+    params: RAGOrchestrationRequest;
+    route: QueryRoute;
+  }): BuiltPrompt {
+    const promptParams: PromptBuildParams = {
+      query: opts.params.query,
+      validatedResults: [],
+    };
+
+    // Add personality prompt only if present
+    if (opts.params.personalityPrompt !== undefined) {
+      promptParams.personalityPrompt = opts.params.personalityPrompt;
+    }
+
+    // Add first message flag if present
+    if (opts.params.isFirstMessage !== undefined) {
+      promptParams.isFirstMessage = opts.params.isFirstMessage;
+    }
+
+    // Add user name if discovered
+    if (opts.params.userName !== undefined) {
+      promptParams.userName = opts.params.userName;
+    }
+
+    // Add query intent (if it's a valid intent type)
+    const validIntents = [
+      'comparative',
+      'factual',
+      'hybrid',
+      'listBuilding',
+      'semantic',
+      'temporal',
+    ];
+    if (validIntents.includes(opts.route.classification.category)) {
+      promptParams.queryIntent = opts.route.classification.category as
+        | 'comparative'
+        | 'factual'
+        | 'hybrid'
+        | 'listBuilding'
+        | 'semantic'
+        | 'temporal';
+    }
+
+    return this.advancedPromptBuilder.buildPrompt(promptParams);
+  }
+
+  /**
+   * Calculate retrieval limit based on query complexity
+   *
+   * Scales limit based on complexity, but respects configured maximum.
+   */
+  private calculateRetrievalLimit(params: {
+    complexity: number;
+    maxResults: number;
+  }): number {
+    // Simple queries (greetings, basic questions): minimal context
+    if (params.complexity <= 3) {
+      return Math.min(10, params.maxResults);
+    }
+
+    // Moderate queries (single-topic questions): moderate context
+    if (params.complexity <= 6) {
+      return Math.min(30, params.maxResults);
+    }
+
+    // Complex queries (multi-part, comparative): use configured maximum
+    return params.maxResults;
   }
 
   /**
@@ -427,30 +437,6 @@ export class RAGOrchestrationServiceImplementation {
   }
 
   /**
-   * Calculate retrieval limit based on query complexity
-   *
-   * Scales limit based on complexity, but respects configured maximum.
-   *
-   * @param complexity - Query complexity score (1-10)
-   * @param maxResults - Maximum results from configuration
-   * @returns Calculated retrieval limit
-   */
-  private calculateRetrievalLimit(complexity: number, maxResults: number): number {
-    // Simple queries (greetings, basic questions): minimal context
-    if (complexity <= 3) {
-      return Math.min(10, maxResults);
-    }
-
-    // Moderate queries (single-topic questions): moderate context
-    if (complexity <= 6) {
-      return Math.min(30, maxResults);
-    }
-
-    // Complex queries (multi-part, comparative): use configured maximum
-    return maxResults;
-  }
-
-  /**
    * Execute retrieval with enhancement params
    */
   private async executeRetrieval(opts: {
@@ -460,7 +446,10 @@ export class RAGOrchestrationServiceImplementation {
   }): Promise<RetrievedContext> {
     // Scale retrieval limit by query complexity and configured maximum
     const maxResults = this.hybridSearchRetriever.getMaxResultsPerQuery();
-    const limit = this.calculateRetrievalLimit(opts.route.classification.complexity, maxResults);
+    const limit = this.calculateRetrievalLimit({
+      complexity: opts.route.classification.complexity,
+      maxResults,
+    });
 
     const retrievalParams: HybridSearchParams = {
       filters: {
@@ -508,6 +497,81 @@ export class RAGOrchestrationServiceImplementation {
       ),
       complexity: opts.route.classification.complexity,
       query: opts.params.query,
+    });
+  }
+
+  /**
+   * Handle orchestration path for queries that don't need retrieval
+   */
+  private handleNoRetrievalPath(opts: {
+    params: RAGOrchestrationRequest;
+    route: QueryRoute;
+    startTime: number;
+    stepsExecuted: string[];
+  }): RAGOrchestrationResponse {
+    this.logger.debug({
+      message: 'Skipping retrieval - query does not require context',
+      metadata: {
+        category: opts.route.classification.category,
+        complexity: opts.route.classification.complexity,
+      },
+    });
+
+    opts.stepsExecuted.push('build_prompt');
+    const prompt = this.buildPromptWithoutContext({ params: opts.params, route: opts.route });
+    const duration = Date.now() - opts.startTime;
+
+    this.logOrchestrationComplete({
+      contextFitted: 0,
+      duration,
+      pathTaken: opts.route.path,
+      stepsExecuted: opts.stepsExecuted,
+    });
+
+    return this.createResponse({
+      decomposition: null,
+      duration,
+      enhancement: null,
+      fittedContext: {
+        includedCount: 0,
+        includedResults: [],
+        tokenUsage: {
+          available: 0,
+          reserved: 0,
+          total: 0,
+          used: 0,
+          utilization: 0,
+        },
+        truncatedCount: 0,
+      },
+      params: opts.params,
+      pathTaken: opts.route.path,
+      prompt,
+      retrieval: {
+        count: 0,
+        results: [],
+        retrievalMetadata: {
+          alternativesCount: 0,
+          filtersApplied: [],
+          relatedCount: 0,
+          retrievalDuration: 0,
+          totalDocumentsSearched: 0,
+          usedHyDE: false,
+        },
+      },
+      stepsExecuted: opts.stepsExecuted,
+      validation: {
+        rejectedCount: 0,
+        validCount: 0,
+        validResults: [],
+        validationMetadata: {
+          avgValidationScore: 0,
+          failedCount: 0,
+          passedCount: 0,
+          totalResults: 0,
+          validationDuration: 0,
+        },
+      },
     });
   }
 

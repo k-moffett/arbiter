@@ -126,9 +126,21 @@ import type { ToolPlan } from './ToolPlanner/types';
  */
 export interface RAGOrchestrationRequest {
   /**
+   * Whether this is the user's first message in the session
+   * Used to trigger LLM-generated greeting
+   */
+  isFirstMessage?: boolean;
+
+  /**
    * Message ID for tracking
    */
   messageId: string;
+
+  /**
+   * Personality-specific system prompt addition
+   * Optional - will be passed through to prompt builder
+   */
+  personalityPrompt?: string;
 
   /**
    * User query
@@ -144,6 +156,12 @@ export interface RAGOrchestrationRequest {
    * User ID
    */
   userId: string;
+
+  /**
+   * Discovered user name from conversation history
+   * Passed to LLM for natural usage in responses
+   */
+  userName?: string;
 }
 
 /**
