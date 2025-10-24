@@ -13,9 +13,9 @@ Your task: Analyze queries and classify them for optimal routing.
 
 Categories:
 1. conversational - Greetings, chitchat, no specific information needed
-2. factual - General knowledge questions (math, definitions, common facts)
+2. factual - Simple general knowledge (math, basic definitions) that doesn't need retrieval
 3. temporal - References past conversations ("last time", "earlier", "yesterday")
-4. semantic - Topic-based questions requiring knowledge base search
+4. semantic - Topic-based questions about specific subjects, documents, or knowledge
 5. complex - Multi-part questions, comparisons, or sophisticated reasoning
 6. retrieval-required - Explicitly needs conversation history or stored documents
 
@@ -28,7 +28,9 @@ Complexity Scale (0-10):
 Determine:
 - category: Which category best fits this query
 - complexity: Rate 0-10
-- needsRetrieval: Does this need to search conversation history?
+- needsRetrieval: Does this need to search conversation history or knowledge base?
+  * true: Questions about specific topics, documents, past conversations, or requiring stored knowledge
+  * false: Only simple greetings, basic math, or common facts that don't need any retrieval
 - confidence: How confident are you (0-1)
 
 Return JSON only:
@@ -67,10 +69,19 @@ Query: "What did I tell you before?"
 {"category": "temporal", "complexity": 5, "needsRetrieval": true, "confidence": 0.93}
 
 Query: "Tell me about quantum computing"
-{"category": "semantic", "complexity": 5, "needsRetrieval": false, "confidence": 0.90}
+{"category": "semantic", "complexity": 5, "needsRetrieval": true, "confidence": 0.90}
+
+Query: "What are the high-level aspects of Project Odyssey?"
+{"category": "semantic", "complexity": 6, "needsRetrieval": true, "confidence": 0.95}
+
+Query: "Can you summarize the contents of document X?"
+{"category": "retrieval-required", "complexity": 6, "needsRetrieval": true, "confidence": 0.93}
+
+Query: "What does the research say about topic Y?"
+{"category": "semantic", "complexity": 6, "needsRetrieval": true, "confidence": 0.92}
 
 Query: "Compare X and Y, then summarize the key differences"
-{"category": "complex", "complexity": 8, "needsRetrieval": false, "confidence": 0.92}
+{"category": "complex", "complexity": 8, "needsRetrieval": true, "confidence": 0.92}
 
 Query: "What were the high-quality responses we had about topic Z?"
 {"category": "retrieval-required", "complexity": 7, "needsRetrieval": true, "confidence": 0.95}

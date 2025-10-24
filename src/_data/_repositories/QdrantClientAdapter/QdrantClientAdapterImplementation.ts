@@ -8,9 +8,13 @@
 import type { VectorRepository } from '../interfaces';
 import type { SearchQuery, SearchResult, VectorDocument } from '../types';
 import type {
+  CollectionMetadata,
+  GetCollectionInfoParams,
+  ListCollectionsParams,
   QdrantClientConfig,
   QdrantCondition,
   QdrantFilter,
+  SearchInCollectionParams,
 } from './interfaces';
 
 import { QdrantClient } from '@qdrant/js-client-rest';
@@ -103,6 +107,106 @@ export class QdrantClientAdapter implements VectorRepository {
   }
 
   /**
+   * Get detailed collection information
+   */
+  public async getCollectionInfo(params: GetCollectionInfoParams): Promise<CollectionMetadata> {
+     
+    const info = await this.client.getCollection(params.name);
+
+    const pointCount = info.points_count ?? 0;
+    const vectorConfig = this.extractVectorConfig({ collectionInfo: info });
+    const status = info.status;
+
+    const description = this.extractStringFromSchema({
+      key: 'description',
+      schema: info.payload_schema,
+    });
+    const tags = this.extractArrayFromSchema({
+      key: 'tags',
+      schema: info.payload_schema,
+    });
+     
+
+    const collectionMetadata: CollectionMetadata = {
+      distance: vectorConfig.distance,
+      name: params.name,
+      pointCount,
+      status,
+      vectorDimensions: vectorConfig.size,
+    };
+
+    if (description !== null) {
+      collectionMetadata.description = description;
+    }
+
+    if (tags !== null) {
+      collectionMetadata.tags = tags;
+    }
+
+    return collectionMetadata;
+  }
+
+  /**
+   * List all collections with optional metadata
+   */
+  public async listCollectionsWithMetadata(
+    params: ListCollectionsParams
+  ): Promise<CollectionMetadata[]> {
+    const response = await this.client.getCollections();
+
+    if (params.includeMetadata !== true) {
+      return response.collections.map((c) => ({
+        distance: '',
+        name: c.name,
+        pointCount: 0,
+        status: 'ok',
+        vectorDimensions: 0,
+      }));
+    }
+
+    // Fetch detailed metadata for each collection
+    const metadata: CollectionMetadata[] = [];
+    for (const collection of response.collections) {
+       
+      const info = await this.client.getCollection(collection.name);
+
+      const pointCount = info.points_count ?? 0;
+      const vectorConfig = this.extractVectorConfig({ collectionInfo: info });
+      const status = info.status;
+
+      const description = this.extractStringFromSchema({
+        key: 'description',
+        schema: info.payload_schema,
+      });
+      const tags = this.extractArrayFromSchema({
+        key: 'tags',
+        schema: info.payload_schema,
+      });
+       
+
+      const collectionMetadata: CollectionMetadata = {
+        distance: vectorConfig.distance,
+        name: collection.name,
+        pointCount,
+        status,
+        vectorDimensions: vectorConfig.size,
+      };
+
+      if (description !== null) {
+        collectionMetadata.description = description;
+      }
+
+      if (tags !== null) {
+        collectionMetadata.tags = tags;
+      }
+
+      metadata.push(collectionMetadata);
+    }
+
+    return metadata;
+  }
+
+  /**
    * Search vectors
    */
   public async search(query: SearchQuery): Promise<SearchResult[]> {
@@ -139,6 +243,50 @@ export class QdrantClientAdapter implements VectorRepository {
       content: this.extractContent(result.payload),
       id: String(result.id),
       metadata: result.payload ?? {},
+      score: result.score,
+    }));
+  }
+
+  /**
+   * Search in specific collection (dynamic collection targeting)
+   */
+  public async searchInCollection(
+    params: SearchInCollectionParams
+  ): Promise<SearchResult[]> {
+    const filter = this.buildFilterSafe(params.filters);
+    const limit = params.limit ?? 10;
+
+    /* eslint-disable @typescript-eslint/naming-convention */
+    const searchRequest: {
+      filter?: QdrantFilter;
+      limit: number;
+      score_threshold?: number;
+      vector: number[];
+      with_payload: true;
+    } = {
+      limit,
+      vector: params.vector,
+      with_payload: true,
+    };
+
+    if (filter !== null) {
+      searchRequest.filter = filter;
+    }
+
+    if (params.scoreThreshold !== undefined) {
+      searchRequest.score_threshold = params.scoreThreshold;
+    }
+
+    const results = await this.client.search(params.collectionName, searchRequest);
+    /* eslint-enable @typescript-eslint/naming-convention */
+
+    return results.map((result) => ({
+      content: this.extractContent(result.payload),
+      id: String(result.id),
+      metadata: {
+        ...(result.payload ?? {}),
+        collectionName: params.collectionName, // Add source collection
+      },
       score: result.score,
     }));
   }
@@ -243,6 +391,21 @@ export class QdrantClientAdapter implements VectorRepository {
   }
 
   /**
+   * Extract array from payload schema
+   */
+  private extractArrayFromSchema(params: {
+    key: string;
+    schema: Record<string, unknown> | null | undefined;
+  }): string[] | null {
+    if (params.schema === null || params.schema === undefined) {
+      return null;
+    }
+
+    const value = params.schema[params.key];
+    return Array.isArray(value) ? (value as string[]) : null;
+  }
+
+  /**
    * Extract content from payload with type safety
    */
   private extractContent(payload: { content?: unknown } | null | undefined): string {
@@ -267,6 +430,62 @@ export class QdrantClientAdapter implements VectorRepository {
 
     // For objects, return empty string (shouldn't happen with proper data)
     return '';
+  }
+
+  /**
+   * Extract string value from payload schema
+   */
+  private extractStringFromSchema(params: {
+    key: string;
+    schema: Record<string, unknown> | null | undefined;
+  }): string | null {
+    if (params.schema === null || params.schema === undefined) {
+      return null;
+    }
+
+    const value = params.schema[params.key];
+    return typeof value === 'string' ? value : null;
+  }
+
+  /**
+   * Extract vector configuration from collection info
+   */
+  private extractVectorConfig(params: {
+     
+    collectionInfo: {
+      config?: {
+        params?: {
+          vectors?: unknown;
+        };
+      };
+    };
+     
+  }): { distance: string; size: number } {
+    const vectorConfig = params.collectionInfo.config?.params?.vectors;
+
+    // Default values
+    if (vectorConfig === undefined || vectorConfig === null) {
+      return { distance: '', size: 0 };
+    }
+
+    // Type guard: must be an object
+    if (typeof vectorConfig !== 'object') {
+      return { distance: '', size: 0 };
+    }
+
+    // Extract size
+    const size =
+      'size' in vectorConfig && typeof vectorConfig.size === 'number'
+        ? vectorConfig.size
+        : 0;
+
+    // Extract distance
+    const distance =
+      'distance' in vectorConfig && typeof vectorConfig.distance === 'string'
+        ? vectorConfig.distance
+        : '';
+
+    return { distance, size };
   }
 
   /**

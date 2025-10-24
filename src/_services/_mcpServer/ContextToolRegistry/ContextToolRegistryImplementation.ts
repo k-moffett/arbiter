@@ -15,6 +15,8 @@ import type {
 import { CONTEXT_TOOLS } from './consts';
 import {
   handleGetRequestContext,
+  handleListCollections,
+  handleSearchInCollection,
   handleVectorSearchContext,
   handleVectorUpsertContext,
 } from './utils';
@@ -46,6 +48,10 @@ export class ContextToolRegistryImplementation implements ContextToolRegistry {
     return {
       handleGetRequestContext: async (params: unknown) =>
         handleGetRequestContext({ params, qdrantClient: this.qdrantClient }),
+      handleListCollections: async (params: unknown) =>
+        handleListCollections({ params, qdrantClient: this.qdrantClient }),
+      handleSearchInCollection: async (params: unknown) =>
+        handleSearchInCollection({ params, qdrantClient: this.qdrantClient }),
       handleVectorSearchContext: async (params: unknown) =>
         handleVectorSearchContext({ params, qdrantClient: this.qdrantClient }),
       handleVectorUpsertContext: async (params: unknown) =>

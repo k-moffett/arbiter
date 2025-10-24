@@ -95,4 +95,48 @@ export const CONTEXT_TOOLS: ContextToolDefinition[] = [
     },
     name: 'get_request_context',
   },
+  {
+    description: 'Discover available Qdrant collections with metadata (point count, dimensions, description, tags)',
+    inputSchema: {
+      properties: {
+        includeMetadata: {
+          description: 'Include detailed metadata (point count, dimensions, description, tags). Default: false',
+          type: 'boolean',
+        },
+      },
+      type: 'object',
+    },
+    name: 'list_collections',
+  },
+  {
+    description: 'Execute semantic search in specific Qdrant collection (use list_collections first to discover available collections)',
+    inputSchema: {
+      properties: {
+        collectionName: {
+          description: 'Target collection name (e.g., "project-odyssey")',
+          type: 'string',
+        },
+        filters: {
+          description: 'Metadata filters as key-value pairs',
+          type: 'object',
+        },
+        limit: {
+          description: 'Maximum number of results (default: 10)',
+          type: 'number',
+        },
+        queryVector: {
+          description: '768-dimensional embedding vector for semantic search',
+          items: { type: 'number' },
+          type: 'array',
+        },
+        scoreThreshold: {
+          description: 'Minimum similarity score threshold (0-1)',
+          type: 'number',
+        },
+      },
+      required: ['collectionName', 'queryVector'],
+      type: 'object',
+    },
+    name: 'search_in_collection',
+  },
 ];

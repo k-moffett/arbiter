@@ -13,8 +13,11 @@
  */
 
 /* eslint-disable no-console -- CLI script requires console output for user interaction */
+/* eslint-disable max-lines -- CLI script with comprehensive argument parsing and setup */
 
-import { existsSync } from 'fs';
+import type { DocumentMetadata } from '../types/index.js';
+
+import { existsSync, readFileSync } from 'fs';
 
 import { LogLevel } from '@shared/_base/BaseLogger/index.js';
 import { ConsoleLogger } from '@shared/_infrastructure/ConsoleLogger/index.js';
@@ -25,6 +28,7 @@ import { OllamaEmbeddingService } from '../../OllamaEmbeddingService/index.js';
 import { SimpleChunker } from '../../TextChunkingService/_strategies/SimpleChunker/index.js';
 import { TextChunkingService } from '../../TextChunkingService/index.js';
 import { PDFIngestionService } from '../index.js';
+import { MetadataValidator } from '../validators/index.js';
 
 // Parse command line arguments
 const args = process.argv.slice(2);
@@ -45,29 +49,55 @@ Arguments:
 Options:
   --collection-name <name>    Custom collection name (default: auto-generated from filename)
   --force                     Overwrite existing collection
-  --chunking-strategy <type>  Chunking strategy: simple (default: simple)
+  --chunking-strategy <type>  Chunking strategy: simple, semantic (default: from env or simple)
   --max-chunk-size <number>   Maximum chunk size in characters (default: 1500)
   --min-chunk-size <number>   Minimum chunk size in characters (default: 200)
   --chunk-overlap <number>    Overlap between chunks in characters (default: 100)
   --verbose, -v               Enable verbose logging
   --help, -h                  Show this help message
 
+Metadata Options:
+  --metadata-file <path>      Load metadata from JSON file
+  --title <string>            Document title (required if metadata enforcement enabled)
+  --author <string>           Document author (required if metadata enforcement enabled)
+  --description <string>      Document description (required if metadata enforcement enabled)
+  --category <string>         Document category (required if metadata enforcement enabled)
+  --tags <string>             Comma-separated tags (required if metadata enforcement enabled)
+  --source <string>           Document source (optional)
+  --language <string>         Document language (optional, default: en)
+  --publish-date <string>     Publication date in ISO 8601 format (optional)
+  --version <string>          Document version (optional)
+
 Examples:
   npm run ingest:pdf -- /path/to/document.pdf
   npm run ingest:pdf -- /path/to/document.pdf --collection-name my-docs
   npm run ingest:pdf -- /path/to/document.pdf --force
-  npm run ingest:pdf -- /path/to/document.pdf --chunking-strategy simple
+  npm run ingest:pdf -- /path/to/document.pdf --chunking-strategy semantic
   npm run ingest:pdf -- /path/to/document.pdf --max-chunk-size 2000
   npm run ingest:pdf -- /path/to/document.pdf --verbose
 
+  # With metadata from JSON file
+  npm run ingest:pdf -- /path/to/document.pdf --metadata-file metadata.json
+
+  # With metadata from CLI flags
+  npm run ingest:pdf -- /path/to/document.pdf \\
+    --title "Project Odyssey Documentation" \\
+    --author "Engineering Team" \\
+    --description "Technical documentation for Project Odyssey" \\
+    --category "technical" \\
+    --tags "engineering,documentation,project-odyssey"
+
 Environment Variables:
-  QDRANT_HOST         Qdrant host (default: localhost)
-  QDRANT_PORT         Qdrant port (default: 6333)
-  LOG_LEVEL           Log level: DEBUG, INFO, WARN, ERROR (default: INFO)
+  QDRANT_HOST                    Qdrant host (default: localhost)
+  QDRANT_PORT                    Qdrant port (default: 6333)
+  LOG_LEVEL                      Log level: DEBUG, INFO, WARN, ERROR (default: INFO)
+  REQUIRE_DOCUMENT_METADATA      Enforce metadata requirements: true, false (default: false)
+  DEFAULT_CHUNKING_STRATEGY      Default chunking strategy: simple, semantic (default: simple)
 
 Prerequisites:
   - Qdrant vector database running
   - Environment variables configured
+  - For semantic chunking: Ollama running with configured model
 
 Exit Codes:
   0 = Success
@@ -82,6 +112,18 @@ interface ParsedArgs {
   force: boolean;
   help: boolean;
   maxChunkSize?: number;
+  metadata?: {
+    author?: string;
+    category?: string;
+    description?: string;
+    language?: string;
+    publishDate?: string;
+    source?: string;
+    tags?: string[];
+    title?: string;
+    version?: string;
+  };
+  metadataFile?: string;
   minChunkSize?: number;
   pdfPath?: string;
   verbose: boolean;
@@ -124,7 +166,7 @@ function processNumberArg(params: {
  *
  * Note: Complexity is expected for CLI argument parsing
  */
-// eslint-disable-next-line complexity, max-statements
+// eslint-disable-next-line complexity, max-statements, max-lines-per-function -- CLI argument parsing requires comprehensive switch-like logic
 function processArgument(params: {
   arg: string | undefined;
   args: string[];
@@ -198,6 +240,116 @@ function processArgument(params: {
     });
   }
 
+  // Metadata flags
+  if (arg === '--metadata-file') {
+    return processStringArg({
+      args,
+      index,
+      setValue: (value) => {
+        result.metadataFile = value;
+      },
+    });
+  }
+
+  if (arg === '--title') {
+    return processStringArg({
+      args,
+      index,
+      setValue: (value) => {
+        result.metadata ??= {};
+        result.metadata.title = value;
+      },
+    });
+  }
+
+  if (arg === '--author') {
+    return processStringArg({
+      args,
+      index,
+      setValue: (value) => {
+        result.metadata ??= {};
+        result.metadata.author = value;
+      },
+    });
+  }
+
+  if (arg === '--description') {
+    return processStringArg({
+      args,
+      index,
+      setValue: (value) => {
+        result.metadata ??= {};
+        result.metadata.description = value;
+      },
+    });
+  }
+
+  if (arg === '--category') {
+    return processStringArg({
+      args,
+      index,
+      setValue: (value) => {
+        result.metadata ??= {};
+        result.metadata.category = value;
+      },
+    });
+  }
+
+  if (arg === '--tags') {
+    return processStringArg({
+      args,
+      index,
+      setValue: (value) => {
+        result.metadata ??= {};
+        result.metadata.tags = value.split(',').map((t) => t.trim());
+      },
+    });
+  }
+
+  if (arg === '--source') {
+    return processStringArg({
+      args,
+      index,
+      setValue: (value) => {
+        result.metadata ??= {};
+        result.metadata.source = value;
+      },
+    });
+  }
+
+  if (arg === '--language') {
+    return processStringArg({
+      args,
+      index,
+      setValue: (value) => {
+        result.metadata ??= {};
+        result.metadata.language = value;
+      },
+    });
+  }
+
+  if (arg === '--publish-date') {
+    return processStringArg({
+      args,
+      index,
+      setValue: (value) => {
+        result.metadata ??= {};
+        result.metadata.publishDate = value;
+      },
+    });
+  }
+
+  if (arg === '--version') {
+    return processStringArg({
+      args,
+      index,
+      setValue: (value) => {
+        result.metadata ??= {};
+        result.metadata.version = value;
+      },
+    });
+  }
+
   if (arg !== undefined && !arg.startsWith('--')) {
     result.pdfPath ??= arg;
   }
@@ -223,6 +375,52 @@ function parseArgs(): ParsedArgs {
   }
 
   return result;
+}
+
+/**
+ * Load metadata from JSON file
+ */
+// eslint-disable-next-line local-rules/require-typed-params -- Simple utility function with single string path parameter
+function loadMetadataFromFile(filePath: string): DocumentMetadata {
+  try {
+    const fileContent = readFileSync(filePath, 'utf-8');
+    const metadata = JSON.parse(fileContent) as DocumentMetadata;
+    return metadata;
+  } catch (error) {
+    const err = error as Error;
+    throw new Error(`Failed to load metadata from file '${filePath}': ${err.message}`);
+  }
+}
+
+/**
+ * Merge metadata from file and CLI flags
+ * CLI flags take precedence over file metadata
+ *
+ * @returns merged metadata or undefined if both inputs are undefined
+ */
+function mergeMetadata(params: {
+  fileMetadata?: DocumentMetadata;
+  flagMetadata?: Partial<DocumentMetadata>;
+  // eslint-disable-next-line local-rules/prefer-null-over-undefined
+}): DocumentMetadata | undefined {
+  const { fileMetadata, flagMetadata } = params;
+
+  if (fileMetadata === undefined && flagMetadata === undefined) {
+    // eslint-disable-next-line local-rules/prefer-null-over-undefined
+    return undefined;
+  }
+
+  const merged: Partial<DocumentMetadata> = {
+    ...fileMetadata,
+    ...flagMetadata,
+  };
+
+  // Merge tags arrays if both exist
+  if (fileMetadata?.tags !== undefined && flagMetadata?.tags !== undefined) {
+    merged.tags = [...fileMetadata.tags, ...flagMetadata.tags];
+  }
+
+  return merged as DocumentMetadata;
 }
 
 /**
@@ -271,9 +469,14 @@ function initializeServices(parsed: ParsedArgs): PDFIngestionService {
   // Initialize Ollama Embedding Service
   const embeddingService = new OllamaEmbeddingService();
 
+  // Initialize Metadata Validator (reads REQUIRE_DOCUMENT_METADATA from ENV)
+  const enforceMetadata = process.env['REQUIRE_DOCUMENT_METADATA'] === 'true';
+  const metadataValidator = new MetadataValidator({ enforceMetadata });
+
   const ingestionService = new PDFIngestionService({
     embeddingService,
     logger,
+    metadataValidator,
     pdfParser,
     qdrantAdapter,
     textChunker,
@@ -285,6 +488,30 @@ function initializeServices(parsed: ParsedArgs): PDFIngestionService {
 }
 
 /**
+ * Process metadata from parsed args
+ */
+// eslint-disable-next-line local-rules/prefer-null-over-undefined -- Undefined is appropriate for optional metadata
+function processMetadata(parsed: ParsedArgs): DocumentMetadata | undefined {
+  let fileMetadata: DocumentMetadata | undefined;
+
+  // Load from file if provided
+  if (parsed.metadataFile !== undefined) {
+    fileMetadata = loadMetadataFromFile(parsed.metadataFile);
+  }
+
+  // Merge file metadata with CLI flag metadata
+  if (fileMetadata === undefined && parsed.metadata === undefined) {
+    // eslint-disable-next-line local-rules/prefer-null-over-undefined
+    return undefined;
+  }
+
+  return mergeMetadata({
+    ...(fileMetadata !== undefined ? { fileMetadata } : {}),
+    ...(parsed.metadata !== undefined ? { flagMetadata: parsed.metadata } : {}),
+  });
+}
+
+/**
  * Build ingest parameters from parsed args
  */
 function buildIngestParams(parsed: ParsedArgs): {
@@ -293,6 +520,7 @@ function buildIngestParams(parsed: ParsedArgs): {
   collectionNameOverride?: string;
   force: boolean;
   maxChunkSize?: number;
+  metadata?: DocumentMetadata;
   minChunkSize?: number;
   pdfPath: string;
 } {
@@ -302,6 +530,7 @@ function buildIngestParams(parsed: ParsedArgs): {
     collectionNameOverride?: string;
     force: boolean;
     maxChunkSize?: number;
+    metadata?: DocumentMetadata;
     minChunkSize?: number;
     pdfPath: string;
   } = {
@@ -323,6 +552,12 @@ function buildIngestParams(parsed: ParsedArgs): {
   }
   if (parsed.minChunkSize !== undefined) {
     params.minChunkSize = parsed.minChunkSize;
+  }
+
+  // Process metadata from file and CLI flags
+  const metadata = processMetadata(parsed);
+  if (metadata !== undefined) {
+    params.metadata = metadata;
   }
 
   return params;

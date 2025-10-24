@@ -81,3 +81,55 @@ export interface QdrantSearchResult {
   /** Similarity score */
   score: number;
 }
+
+/**
+ * Collection metadata from Qdrant
+ */
+export interface CollectionMetadata {
+  /** Manual description (from payload schema) */
+  description?: string;
+  /** Distance metric (Cosine, Euclid, Dot) */
+  distance: string;
+  /** Collection name */
+  name: string;
+  /** Number of points in collection */
+  pointCount: number;
+  /** Collection status */
+  status: string;
+  /** Manual tags (from payload schema) */
+  tags?: string[];
+  /** Vector dimensions */
+  vectorDimensions: number;
+}
+
+/**
+ * Parameters for listing collections
+ */
+export interface ListCollectionsParams {
+  /** Include detailed metadata (default: false) */
+  includeMetadata?: boolean;
+}
+
+/**
+ * Parameters for getting collection info
+ */
+export interface GetCollectionInfoParams {
+  /** Collection name */
+  name: string;
+}
+
+/**
+ * Parameters for searching in specific collection
+ */
+export interface SearchInCollectionParams {
+  /** Target collection name */
+  collectionName: string;
+  /** Metadata filters */
+  filters?: Record<string, unknown>;
+  /** Maximum results (default: 10) */
+  limit?: number;
+  /** Minimum score threshold (0-1) */
+  scoreThreshold?: number;
+  /** Search vector */
+  vector: number[];
+}

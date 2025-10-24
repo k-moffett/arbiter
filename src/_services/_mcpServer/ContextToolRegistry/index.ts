@@ -20,11 +20,15 @@ export type {
 
 // Public types
 export type {
+  CollectionInfo,
+  CollectionSearchResult,
   ContextPayload,
   ContextSearchFilters,
   ContextSearchResult,
   GetRequestContextParams,
   GetRequestContextResult,
+  ListCollectionsResult,
+  SearchInCollectionParams,
   VectorSearchContextParams,
   VectorSearchContextResult,
   VectorUpsertContextParams,

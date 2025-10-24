@@ -1,0 +1,6 @@
+ 1. Collection Router Complexity: Do you want full multi-collection support (Phase 6) or start with              │
+     │ single-collection routing?                                                                                      │
+     │ 2. Tool Planning vs RAG Integration: Prefer ToolPlanner integration (cleaner) or RAG orchestration (more        │
+     │ powerful)?                                                                                                      │
+     │ 3. Metadata Richness: Should we include collection descriptions/tags for better selection (requires manual      │
+     │ metadata)?

@@ -6,9 +6,11 @@
  */
 
 import type {
+  CollectionSearchResult,
   ContextPayload,
   ContextSearchFilters,
   GetRequestContextResult,
+  ListCollectionsResult,
   MCPClient,
   MCPClientConfig,
   MCPToolCallRequest,
@@ -119,6 +121,26 @@ export class MCPClientImplementation implements MCPClient {
   }
 
   /**
+   * List all available Qdrant collections with metadata
+   */
+  public async listCollections(params: {
+    includeMetadata: boolean;
+  }): Promise<ListCollectionsResult> {
+    const response = await this.callTool<ListCollectionsResult>({
+      arguments: {
+        includeMetadata: params.includeMetadata,
+      },
+      name: 'list_collections',
+    });
+
+    if (!response.success || response.result === undefined) {
+      throw new Error(`list_collections failed: ${response.error ?? 'Unknown error'}`);
+    }
+
+    return response.result;
+  }
+
+  /**
    * Search conversation history semantically
    */
   public async searchContext(params: {
@@ -144,6 +166,34 @@ export class MCPClientImplementation implements MCPClient {
     }
 
     return response.result;
+  }
+
+  /**
+   * Search in specific Qdrant collection
+   */
+  public async searchInCollection(params: {
+    collectionName: string;
+    filters?: Record<string, unknown>;
+    limit?: number;
+    queryVector: number[];
+    scoreThreshold?: number;
+  }): Promise<CollectionSearchResult[]> {
+    const response = await this.callTool<{ results: CollectionSearchResult[] }>({
+      arguments: {
+        collectionName: params.collectionName,
+        filters: params.filters,
+        limit: params.limit,
+        queryVector: params.queryVector,
+        scoreThreshold: params.scoreThreshold,
+      },
+      name: 'search_in_collection',
+    });
+
+    if (!response.success || response.result === undefined) {
+      throw new Error(`search_in_collection failed: ${response.error ?? 'Unknown error'}`);
+    }
+
+    return response.result.results;
   }
 
   /**

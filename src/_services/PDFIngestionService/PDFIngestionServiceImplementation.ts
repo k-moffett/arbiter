@@ -12,6 +12,7 @@ import type { TextChunkingService } from '../TextChunkingService/index.js';
 import type { ChunkingStrategy, TextChunk } from '../TextChunkingService/types.js';
 import type { IngestPDFParams, IPDFIngestionService } from './interfaces.js';
 import type { PDFIngestionResult } from './types.js';
+import type { MetadataValidator } from './validators/index.js';
 import type { BaseLogger } from '@shared/_base/BaseLogger/index.js';
 
 import { randomUUID } from 'crypto';
@@ -24,6 +25,7 @@ export interface PDFIngestionServiceParams {
   embeddingDimensions?: number;
   embeddingService?: OllamaEmbeddingService;
   logger: BaseLogger;
+  metadataValidator?: MetadataValidator;
   pdfParser: PDFParserService;
   qdrantAdapter: QdrantClientAdapter;
   textChunker: TextChunkingService;
@@ -42,6 +44,7 @@ export class PDFIngestionService implements IPDFIngestionService {
   private readonly embeddingDimensions: number;
   private readonly embeddingService: OllamaEmbeddingService | undefined;
   private readonly logger: BaseLogger;
+  private readonly metadataValidator: MetadataValidator | undefined;
   private readonly pdfParser: PDFParserService;
   private readonly qdrantAdapter: QdrantClientAdapter;
   private readonly textChunker: TextChunkingService;
@@ -52,17 +55,25 @@ export class PDFIngestionService implements IPDFIngestionService {
     this.textChunker = params.textChunker;
     this.qdrantAdapter = params.qdrantAdapter;
     this.embeddingService = params.embeddingService;
+    this.metadataValidator = params.metadataValidator;
     this.embeddingDimensions = params.embeddingDimensions ?? 768;
   }
 
   /**
    * Ingest a PDF file into Qdrant
    */
+  // eslint-disable-next-line max-statements -- Sequential ingestion workflow requires comprehensive step-by-step processing
   public async ingest(params: IngestPDFParams): Promise<PDFIngestionResult> {
     const { chunkingStrategy = 'simple', force = false, pdfPath } = params;
 
     try {
       this.logger.info({ message: 'Starting PDF ingestion', context: { pdfPath, chunkingStrategy } });
+
+      // Validate metadata if validator is configured
+      if (this.metadataValidator !== undefined) {
+        this.metadataValidator.validate(params.metadata);
+        this.logger.debug({ message: 'Document metadata validated' });
+      }
 
       const parseResult = await this.pdfParser.parse({ input: pdfPath });
 

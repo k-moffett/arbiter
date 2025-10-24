@@ -22,11 +22,9 @@ import type { AdvancedPromptBuilder } from '../AdvancedPromptBuilder';
 import type { BuiltPrompt, PromptBuildParams } from '../AdvancedPromptBuilder/types';
 import type { ContextWindowManager } from '../ContextWindowManager';
 import type { FittedContext } from '../ContextWindowManager/types';
-import type { HybridSearchRetriever } from '../HybridSearchRetriever';
-import type {
-  HybridSearchParams,
-  RetrievedContext,
-} from '../HybridSearchRetriever/types';
+import type { RetrievedContext } from '../HybridSearchRetriever/types';
+import type { MultiCollectionRetriever } from '../MultiCollectionRetriever';
+import type { MultiCollectionRetrievalParams } from '../MultiCollectionRetriever/types';
 import type { QualityGrader } from '../QualityGrader';
 import type { QueryDecomposer } from '../QueryDecomposer';
 import type { QueryEnhancer } from '../QueryEnhancer';
@@ -55,7 +53,7 @@ import type {
  *   queryRouter,
  *   queryEnhancer,
  *   queryDecomposer,
- *   hybridSearchRetriever,
+ *   multiCollectionRetriever,
  *   ragValidator,
  *   contextWindowManager,
  *   advancedPromptBuilder,
@@ -75,8 +73,8 @@ import type {
 export class RAGOrchestrationServiceImplementation {
   private readonly advancedPromptBuilder: AdvancedPromptBuilder;
   private readonly contextWindowManager: ContextWindowManager;
-  private readonly hybridSearchRetriever: HybridSearchRetriever;
   private readonly logger: Logger;
+  private readonly multiCollectionRetriever: MultiCollectionRetriever;
   private readonly qualityGrader: QualityGrader;
   private readonly queryDecomposer: QueryDecomposer;
   private readonly queryEnhancer: QueryEnhancer;
@@ -87,8 +85,8 @@ export class RAGOrchestrationServiceImplementation {
   constructor(params: {
     advancedPromptBuilder: AdvancedPromptBuilder;
     contextWindowManager: ContextWindowManager;
-    hybridSearchRetriever: HybridSearchRetriever;
     logger: Logger;
+    multiCollectionRetriever: MultiCollectionRetriever;
     qualityGrader: QualityGrader;
     queryDecomposer: QueryDecomposer;
     queryEnhancer: QueryEnhancer;
@@ -99,7 +97,7 @@ export class RAGOrchestrationServiceImplementation {
     this.queryRouter = params.queryRouter;
     this.queryEnhancer = params.queryEnhancer;
     this.queryDecomposer = params.queryDecomposer;
-    this.hybridSearchRetriever = params.hybridSearchRetriever;
+    this.multiCollectionRetriever = params.multiCollectionRetriever;
     this.ragValidator = params.ragValidator;
     this.contextWindowManager = params.contextWindowManager;
     this.advancedPromptBuilder = params.advancedPromptBuilder;
@@ -437,26 +435,29 @@ export class RAGOrchestrationServiceImplementation {
   }
 
   /**
-   * Execute retrieval with enhancement params
+   * Execute retrieval with enhancement params (multi-collection)
    */
   private async executeRetrieval(opts: {
     enhancement: EnhancedQuery | null;
     params: RAGOrchestrationRequest;
     route: QueryRoute;
   }): Promise<RetrievedContext> {
-    // Scale retrieval limit by query complexity and configured maximum
-    const maxResults = this.hybridSearchRetriever.getMaxResultsPerQuery();
+    // Calculate retrieval limit based on complexity
+    // Note: MultiCollectionRetriever handles maxResults internally via HybridSearchRetriever
     const limit = this.calculateRetrievalLimit({
       complexity: opts.route.classification.complexity,
-      maxResults,
+      maxResults: 50, // Default maximum
     });
 
-    const retrievalParams: HybridSearchParams = {
+    const retrievalParams: MultiCollectionRetrievalParams = {
+      enableMultiCollection: true, // Enable dynamic multi-collection search
       filters: {
         // Remove sessionId hard filter to enable cross-session memory
         // userId will still filter by user in the MCP layer
       },
       limit,
+      maxCollections: 3, // Search up to 3 collections in parallel
+      minCollectionConfidence: 0.7, // Only search collections with 70%+ confidence
       query: opts.params.query,
       userId: opts.params.userId,
     };
@@ -474,7 +475,7 @@ export class RAGOrchestrationServiceImplementation {
       retrievalParams.relatedQueries = opts.enhancement.expansion.related;
     }
 
-    return this.hybridSearchRetriever.retrieve(retrievalParams);
+    return this.multiCollectionRetriever.retrieve(retrievalParams);
   }
 
   /**

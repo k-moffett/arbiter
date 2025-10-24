@@ -12,9 +12,11 @@ import type { RAGSystemConfig } from '../RAGComponentConfigs';
 
 import { AdvancedPromptBuilder } from '../AdvancedPromptBuilder';
 import { CacheManager } from '../CacheManager';
+import { CollectionSelectorImplementation } from '../CollectionSelector';
 import { ContextWindowManager } from '../ContextWindowManager';
 import { EmbeddingProviderAdapter } from '../EmbeddingProviderAdapter';
 import { HybridSearchRetriever } from '../HybridSearchRetriever';
+import { MultiCollectionRetrieverImplementation } from '../MultiCollectionRetriever';
 import { QualityGrader } from '../QualityGrader';
 import { QueryDecomposer } from '../QueryDecomposer';
 import { QueryEnhancer } from '../QueryEnhancer';
@@ -74,7 +76,11 @@ export interface RAGComponentFactoryParams {
  *   ├── QueryRouter (CacheManager, OllamaProvider)
  *   ├── QueryEnhancer (CacheManager, OllamaProvider)
  *   ├── QueryDecomposer (CacheManager, OllamaProvider)
- *   ├── HybridSearchRetriever (EmbeddingProvider, VectorSearchTool)
+ *   ├── MultiCollectionRetriever
+ *   │   ├── CollectionSelector (OllamaProvider)
+ *   │   ├── HybridSearchRetriever (EmbeddingProvider, VectorSearchTool)
+ *   │   ├── EmbeddingProvider (OllamaProvider)
+ *   │   └── MCPClient
  *   ├── RAGValidator (OllamaProvider)
  *   ├── ContextWindowManager
  *   ├── AdvancedPromptBuilder
@@ -274,14 +280,45 @@ export class RAGComponentFactoryImplementation {
       vectorSearchTool: VectorSearchToolAdapter;
     }
   ): {
-    hybridSearchRetriever: HybridSearchRetriever;
+    multiCollectionRetriever: MultiCollectionRetrieverImplementation;
     ragValidator: RAGValidator;
   } {
+    // Create HybridSearchRetriever (still used for conversation-history)
     const hybridSearchRetriever = new HybridSearchRetriever({
       config: params.config.hybridSearchRetriever,
       embeddingProvider: params.embeddingProvider,
       logger: params.logger,
       vectorSearchTool: params.vectorSearchTool,
+    });
+
+    // Create CollectionSelector for intelligent collection discovery
+    const collectionSelector = new CollectionSelectorImplementation({
+      llm: {
+        generate: async (generateParams: { prompt: string; temperature?: number }) => {
+          const response = await params.ollamaProvider.complete({
+            maxTokens: 500,
+            model: params.config.llmModel,
+            prompt: generateParams.prompt,
+            temperature: generateParams.temperature ?? 0.7,
+          });
+          return response.text;
+        },
+      },
+    });
+
+    // Create MultiCollectionRetriever (wraps HybridSearchRetriever)
+    const multiCollectionRetriever = new MultiCollectionRetrieverImplementation({
+      collectionSelector,
+      embeddingService: {
+        embed: async (embedParams: { text: string }) => {
+          return await params.ollamaProvider.embed({
+            model: params.config.embeddingModel,
+            text: embedParams.text,
+          });
+        },
+      },
+      hybridSearchRetriever,
+      mcpClient: params.mcpClient,
     });
 
     const ragValidator = new RAGValidator({
@@ -290,9 +327,9 @@ export class RAGComponentFactoryImplementation {
       ollamaProvider: params.ollamaProvider,
     });
 
-    params.logger.debug({ message: 'Retrieval components initialized' });
+    params.logger.debug({ message: 'Retrieval components initialized (multi-collection)' });
 
-    return { hybridSearchRetriever, ragValidator };
+    return { multiCollectionRetriever, ragValidator };
   }
 
   /**
@@ -306,6 +343,8 @@ export class RAGComponentFactoryImplementation {
           'QueryRouter',
           'QueryEnhancer',
           'QueryDecomposer',
+          'CollectionSelector',
+          'MultiCollectionRetriever',
           'HybridSearchRetriever',
           'RAGValidator',
           'ContextWindowManager',
@@ -313,7 +352,7 @@ export class RAGComponentFactoryImplementation {
           'ToolPlanner',
           'QualityGrader',
         ],
-        totalComponents: 10,
+        totalComponents: 12,
       },
     });
   }

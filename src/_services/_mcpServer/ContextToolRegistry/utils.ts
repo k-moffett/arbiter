@@ -6,11 +6,16 @@
 
 import type { QdrantClientAdapter } from '../../../_data/_repositories/QdrantClientAdapter';
 import type {
+  CollectionSearchResult,
   ContextPayload,
   ContextSearchFilters,
   GetRequestContextParams,
   GetRequestContextResult,
+  ListCollectionsParams,
+  ListCollectionsResult,
   QdrantFilters,
+  SearchInCollectionParams,
+  SearchInCollectionResult,
   SearchResult,
   VectorSearchContextParams,
   VectorSearchContextResult,
@@ -275,4 +280,104 @@ export async function handleGetRequestContext(params: {
   }
 
   return result;
+}
+
+/**
+ * Handle list_collections tool
+ */
+export async function handleListCollections(params: {
+  params: unknown;
+  qdrantClient: QdrantClientAdapter;
+}): Promise<ListCollectionsResult> {
+  const { params: toolParams, qdrantClient } = params;
+  const { includeMetadata } = toolParams as ListCollectionsParams;
+
+  // Call QdrantClientAdapter method
+  const collections = await qdrantClient.listCollectionsWithMetadata({
+    includeMetadata: includeMetadata ?? false,
+  });
+
+  return {
+    collections: collections.map((c) => {
+      const collectionInfo: {
+        description?: string;
+        distance: string;
+        name: string;
+        pointCount: number;
+        status: string;
+        tags?: string[];
+        vectorDimensions: number;
+      } = {
+        distance: c.distance,
+        name: c.name,
+        pointCount: c.pointCount,
+        status: c.status,
+        vectorDimensions: c.vectorDimensions,
+      };
+
+      if (c.description !== undefined) {
+        collectionInfo.description = c.description;
+      }
+
+      if (c.tags !== undefined) {
+        collectionInfo.tags = c.tags;
+      }
+
+      return collectionInfo;
+    }),
+    count: collections.length,
+  };
+}
+
+/**
+ * Handle search_in_collection tool
+ */
+export async function handleSearchInCollection(params: {
+  params: unknown;
+  qdrantClient: QdrantClientAdapter;
+}): Promise<SearchInCollectionResult> {
+  const { params: toolParams, qdrantClient } = params;
+  const { collectionName, filters, limit, queryVector, scoreThreshold } =
+    toolParams as SearchInCollectionParams;
+
+  // Validate vector dimensions (768 for nomic-embed-text)
+  if (queryVector.length !== 768) {
+    throw new Error(
+      `Invalid query vector dimensions: expected 768, got ${String(queryVector.length)}`
+    );
+  }
+
+  // Call QdrantClientAdapter method - build params with proper optional handling
+  const searchParams: {
+    collectionName: string;
+    filters?: Record<string, unknown>;
+    limit?: number;
+    scoreThreshold?: number;
+    vector: number[];
+  } = {
+    collectionName,
+    limit: limit ?? 10,
+    vector: queryVector,
+  };
+
+  if (filters !== undefined) {
+    searchParams.filters = filters;
+  }
+
+  if (scoreThreshold !== undefined) {
+    searchParams.scoreThreshold = scoreThreshold;
+  }
+
+  const results = await qdrantClient.searchInCollection(searchParams);
+
+  return {
+    collectionName,
+    count: results.length,
+    results: results.map((result): CollectionSearchResult => ({
+      content: result.content,
+      id: result.id,
+      metadata: result.metadata,
+      score: result.score,
+    })),
+  };
 }

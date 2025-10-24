@@ -7,6 +7,8 @@
 import type { QdrantClientAdapter } from '../../../_data/_repositories/QdrantClientAdapter';
 import type {
   GetRequestContextResult,
+  ListCollectionsResult,
+  SearchInCollectionResult,
   VectorSearchContextResult,
   VectorUpsertContextResult,
 } from './types';
@@ -32,6 +34,8 @@ export interface ContextToolRegistry {
  */
 export interface ContextToolHandlers {
   handleGetRequestContext(params: unknown): Promise<GetRequestContextResult>;
+  handleListCollections(params: unknown): Promise<ListCollectionsResult>;
+  handleSearchInCollection(params: unknown): Promise<SearchInCollectionResult>;
   handleVectorSearchContext(params: unknown): Promise<VectorSearchContextResult>;
   handleVectorUpsertContext(params: unknown): Promise<VectorUpsertContextResult>;
 }

@@ -5,10 +5,13 @@
  */
 
 import type {
+  CollectionSearchResult,
   ContextPayload,
   ContextSearchFilters,
   ContextSearchResult,
   GetRequestContextResult,
+  ListCollectionsResult,
+  SearchInCollectionParams,
   VectorSearchContextResult,
   VectorUpsertContextResult,
 } from '../../../../_services/_mcpServer/ContextToolRegistry';
@@ -64,6 +67,11 @@ export interface MCPClient {
   }): Promise<GetRequestContextResult>;
 
   /**
+   * List all available Qdrant collections with metadata
+   */
+  listCollections(params: { includeMetadata: boolean }): Promise<ListCollectionsResult>;
+
+  /**
    * Search conversation history semantically
    */
   searchContext(params: {
@@ -73,6 +81,17 @@ export interface MCPClient {
     queryVector: number[];
     userId: string;
   }): Promise<VectorSearchContextResult>;
+
+  /**
+   * Search in specific Qdrant collection
+   */
+  searchInCollection(params: {
+    collectionName: string;
+    filters?: Record<string, unknown>;
+    limit?: number;
+    queryVector: number[];
+    scoreThreshold?: number;
+  }): Promise<CollectionSearchResult[]>;
 
   /**
    * Store message embedding in Qdrant
@@ -91,10 +110,13 @@ export interface MCPClient {
 
 // Re-export types for convenience
 export type {
+  CollectionSearchResult,
   ContextPayload,
   ContextSearchFilters,
   ContextSearchResult,
   GetRequestContextResult,
+  ListCollectionsResult,
+  SearchInCollectionParams,
   VectorSearchContextResult,
   VectorUpsertContextResult,
 };

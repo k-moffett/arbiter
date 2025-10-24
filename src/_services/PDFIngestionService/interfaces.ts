@@ -6,6 +6,7 @@
 
 import type { ChunkingStrategy } from '../TextChunkingService/types.js';
 import type { PDFIngestionResult } from './types.js';
+import type { DocumentMetadata } from './types/metadata.js';
 
 /**
  * Parameters for PDF ingestion
@@ -16,6 +17,7 @@ export interface IngestPDFParams {
   collectionNameOverride?: string;
   force?: boolean;
   maxChunkSize?: number;
+  metadata?: DocumentMetadata;
   minChunkSize?: number;
   pdfPath: string;
 }

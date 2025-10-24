@@ -189,3 +189,87 @@ export interface SearchResult {
   metadata: SearchResultMetadata;
   score: number;
 }
+
+/**
+ * Tool: list_collections
+ *
+ * Discover available Qdrant collections with metadata
+ */
+export interface ListCollectionsParams {
+  /** Include detailed metadata (point count, dimensions, description, tags) */
+  includeMetadata?: boolean;
+}
+
+/**
+ * Collection metadata from list operation
+ */
+export interface CollectionInfo {
+  /** Manual description (from payload schema) */
+  description?: string;
+  /** Distance metric (Cosine, Euclid, Dot) */
+  distance: string;
+  /** Collection name */
+  name: string;
+  /** Number of points in collection */
+  pointCount: number;
+  /** Collection status */
+  status: string;
+  /** Manual tags (from payload schema) */
+  tags?: string[];
+  /** Vector dimensions */
+  vectorDimensions: number;
+}
+
+/**
+ * Result from list collections operation
+ */
+export interface ListCollectionsResult {
+  /** Collection information */
+  collections: CollectionInfo[];
+  /** Number of collections found */
+  count: number;
+}
+
+/**
+ * Tool: search_in_collection
+ *
+ * Execute semantic search in specific Qdrant collection
+ */
+export interface SearchInCollectionParams {
+  /** Target collection name */
+  collectionName: string;
+  /** Metadata filters */
+  filters?: Record<string, unknown>;
+  /** Maximum number of results */
+  limit?: number;
+  /** Query embedding vector (768-dimensional) */
+  queryVector: number[];
+  /** Minimum score threshold (0-1) */
+  scoreThreshold?: number;
+}
+
+/**
+ * Single result from collection search
+ */
+export interface CollectionSearchResult {
+  /** Document content */
+  content: string;
+  /** Document ID */
+  id: string;
+  /** Document metadata (includes collectionName) */
+  metadata: Record<string, unknown>;
+  /** Similarity score (0-1) */
+  score: number;
+}
+
+/**
+ * Result from search in collection operation
+ */
+export interface SearchInCollectionResult {
+  /** Collection that was searched */
+  collectionName: string;
+  /** Number of results returned */
+  count: number;
+  /** Search results ordered by relevance */
+  results: CollectionSearchResult[];
+}

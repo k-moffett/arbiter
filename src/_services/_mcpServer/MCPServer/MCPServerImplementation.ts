@@ -386,6 +386,17 @@ export class MCPServerImplementation implements MCPServer {
       handler: async (params: unknown) => handlers.handleGetRequestContext(params),
       name: 'get_request_context',
     });
+
+    // Collection discovery tools
+    this.router.registerTool({
+      handler: async (params: unknown) => handlers.handleListCollections(params),
+      name: 'list_collections',
+    });
+
+    this.router.registerTool({
+      handler: async (params: unknown) => handlers.handleSearchInCollection(params),
+      name: 'search_in_collection',
+    });
   }
 
   /**
