@@ -9,6 +9,10 @@ import type { QdrantClientAdapter } from '../../_data/_repositories/QdrantClient
 import type { DocumentMetadataExtractor } from '../DocumentMetadataExtractor/index.js';
 import type { OllamaEmbeddingService } from '../OllamaEmbeddingService/index.js';
 import type { PDFParserService } from '../PDFParserService/index.js';
+import type {
+  ExtractedTags,
+  OllamaTagExtractor,
+} from '../TextChunkingService/_strategies/OllamaSemanticChunker/_analyzers/OllamaTagExtractor/index.js';
 import type { TextChunkingService } from '../TextChunkingService/index.js';
 import type { ChunkingStrategy, TextChunk } from '../TextChunkingService/types.js';
 import type { IngestPDFParams, IPDFIngestionService } from './interfaces.js';
@@ -36,6 +40,10 @@ export interface PDFIngestionServiceParams {
   metadataValidator?: MetadataValidator;
   pdfParser: PDFParserService;
   qdrantAdapter: QdrantClientAdapter;
+
+  /** Optional tag extractor for enriching chunks with NLM-extracted metadata */
+  tagExtractor?: OllamaTagExtractor;
+
   textChunker: TextChunkingService;
 }
 
@@ -57,6 +65,7 @@ export class PDFIngestionService implements IPDFIngestionService {
   private readonly metadataValidator: MetadataValidator | undefined;
   private readonly pdfParser: PDFParserService;
   private readonly qdrantAdapter: QdrantClientAdapter;
+  private readonly tagExtractor: OllamaTagExtractor | undefined;
   private readonly textChunker: TextChunkingService;
 
   constructor(params: PDFIngestionServiceParams) {
@@ -67,6 +76,7 @@ export class PDFIngestionService implements IPDFIngestionService {
     this.embeddingService = params.embeddingService;
     this.metadataValidator = params.metadataValidator;
     this.documentMetadataExtractor = params.documentMetadataExtractor;
+    this.tagExtractor = params.tagExtractor;
     this.autoExtractMetadata = params.autoExtractMetadata ?? false;
     this.embeddingDimensions = params.embeddingDimensions ?? 768;
   }
@@ -136,7 +146,7 @@ export class PDFIngestionService implements IPDFIngestionService {
 
       await this.ensureCollection({ collectionName, force });
 
-      const chunks = await this.chunkText({
+      let chunks = await this.chunkText({
         chunkOverlap: params.chunkOverlap,
         chunkingStrategy,
         maxChunkSize: params.maxChunkSize,
@@ -145,6 +155,19 @@ export class PDFIngestionService implements IPDFIngestionService {
       });
 
       this.logger.info({ context: { chunkCount: chunks.length }, message: 'Text chunked' });
+
+      // Enrich chunks with tag extraction if metadata is available and tag extractor is configured
+      if (finalMetadata !== undefined && this.tagExtractor !== undefined) {
+        this.logger.info({ message: 'Enriching chunks with tag extraction' });
+        chunks = await this.enrichChunksWithTags({
+          chunks,
+          documentMetadata: finalMetadata,
+        });
+        this.logger.info({
+          context: { enrichedCount: chunks.length },
+          message: 'Chunks enriched with tags',
+        });
+      }
 
       // Store chunks in Qdrant
       // TODO: Replace placeholder vectors with real embeddings
@@ -269,6 +292,97 @@ export class PDFIngestionService implements IPDFIngestionService {
         message: 'No collection to delete',
       });
     }
+  }
+
+  /**
+   * Enrich chunks with NLM-extracted tags and metadata
+   *
+   * Calls tag extractor for each chunk to extract:
+   * - tags (keywords)
+   * - entities (proper nouns)
+   * - topics (themes)
+   * - keyPhrases (important multi-word terms)
+   *
+   * @param params - Enrichment parameters
+   * @param params.chunks - Chunks to enrich
+   * @param params.documentMetadata - Document-level metadata to merge
+   * @returns Enriched chunks with tag metadata
+   */
+  private async enrichChunksWithTags(params: {
+    chunks: TextChunk[];
+    documentMetadata: DocumentMetadata;
+  }): Promise<TextChunk[]> {
+    const { chunks, documentMetadata } = params;
+
+    // If no tag extractor, return chunks unchanged
+    if (this.tagExtractor === undefined) {
+      this.logger.debug({
+        message: 'Tag extractor not configured, skipping tag enrichment',
+      });
+      return chunks;
+    }
+
+    this.logger.info({
+      context: { chunkCount: chunks.length },
+      message: 'Starting tag extraction for chunks',
+    });
+
+    const enrichedChunks: TextChunk[] = [];
+
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      if (chunk === undefined) {
+        continue;
+      }
+
+      // Extract tags for this chunk
+      // Schema-validated generation with retry logic makes this assignment safe
+       
+      const tagResult: ExtractedTags = await this.tagExtractor.extractTags({
+        text: chunk.content,
+      });
+       
+
+      // Merge extracted tags with document-level metadata
+      const enrichedChunk: TextChunk = {
+        ...chunk,
+        metadata: {
+          ...chunk.metadata,
+          // Document-level metadata
+          documentTitle: documentMetadata.title,
+          documentAuthor: documentMetadata.author,
+          documentCategory: documentMetadata.category,
+          documentTags: documentMetadata.tags,
+          // Chunk-level extracted metadata
+          tags: tagResult.tags,
+          entities: tagResult.entities,
+          topics: tagResult.topics,
+          keyPhrases: tagResult.keyPhrases,
+          tagConfidence: tagResult.confidence,
+        },
+      };
+
+      enrichedChunks.push(enrichedChunk);
+
+      // Log progress every 50 chunks
+      if ((i + 1) % 50 === 0) {
+        this.logger.info({
+          context: {
+            current: i + 1,
+            percent: Math.round(((i + 1) / chunks.length) * 100),
+            total: chunks.length,
+          },
+          message: 'Tag extraction progress',
+        });
+      }
+    }
+
+    this.logger.info({
+      context: { enrichedCount: enrichedChunks.length },
+      message: 'Tag extraction complete',
+    });
+
+    return enrichedChunks;
   }
 
   /**

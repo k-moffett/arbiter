@@ -231,11 +231,11 @@ npm test
 
 ## References
 
-- [Architecture Overview](.claude/aiContext/refactorPlan/architecture-overview.md)
-- [Project Standards](.claude/aiContext/codingStandards/typescript/project-standards.md)
-- [ADR-001: Multi-Transport Design](.claude/aiContext/refactorPlan/ADR-001-multi-transport-design.md)
-- [ADR-002: Dynamic Agent Spawning](.claude/aiContext/refactorPlan/ADR-002-dynamic-agent-container-spawning.md)
-- [ADR-003: LLM Provider Abstraction](.claude/aiContext/refactorPlan/ADR-003-llm-provider-abstraction.md)
+- [Architecture Overview](refactorPlan/architecture-overview.md)
+- [Project Standards](codingStandards/typescript/project-standards.md)
+- [ADR-001: Multi-Transport Design](refactorPlan/ADR-001-multi-transport-design.md)
+- [ADR-002: Dynamic Agent Spawning](refactorPlan/ADR-002-dynamic-agent-container-spawning.md)
+- [ADR-003: LLM Provider Abstraction](refactorPlan/ADR-003-llm-provider-abstraction.md)
 
 ---
 

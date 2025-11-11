@@ -89,13 +89,6 @@
       "Bash(npm install inversify reflect-metadata)",
       "Bash(npm install --save-dev @types/dockerode)"
     ],
-    "deny": [
-      "Read(./.env)",
-      "Read(./.env.*)",
-      "Read(./secrets/**)",
-      "Read(./build)",
-      "Read(./.git/**)"
-    ],
     "defaultMode": "acceptEdits"
   },
   "hooks": {

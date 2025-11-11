@@ -1,0 +1,11 @@
+# Environment Configuration Files
+#
+# This .gitignore ensures:
+# - Example files (.env.*.example) are tracked in git
+# - Actual config files (.env.*) are ignored
+
+# Ignore all .env files in this directory
+.env.*
+
+# Track example files (exception to above rule)
+!.env.*.example

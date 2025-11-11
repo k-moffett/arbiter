@@ -38,6 +38,9 @@ export interface SemanticChunkerConfig {
   /** Temperature settings for each analyzer */
   temperatures: SemanticChunkerTemperatures;
 
+  /** Token limits for LLM response generation */
+  tokenLimits: SemanticChunkerTokenLimits;
+
   /** Signal weights for boundary detection */
   weights: SemanticChunkerWeights;
 }
@@ -76,6 +79,27 @@ export interface SemanticChunkerTemperatures {
   tag: number;
 
   /** Topic analyzer temperature */
+  topic: number;
+}
+
+/**
+ * Token limits for LLM response generation
+ *
+ * Controls maximum tokens each analyzer can generate. Higher values allow
+ * more complete responses but increase processing time. Too-low values
+ * cause truncation and validation failures.
+ */
+export interface SemanticChunkerTokenLimits {
+  /** Discourse classifier token limit (recommended: 400) */
+  discourse: number;
+
+  /** Structure detector token limit (recommended: 500) */
+  structure: number;
+
+  /** Tag extractor token limit (recommended: 500) */
+  tag: number;
+
+  /** Topic analyzer token limit (recommended: 300) */
   topic: number;
 }
 

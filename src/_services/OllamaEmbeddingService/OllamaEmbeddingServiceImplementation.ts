@@ -37,7 +37,7 @@ export class OllamaEmbeddingService {
    * Create Ollama Embedding Service
    *
    * Configuration loaded from environment variables:
-   * - OLLAMA_BASE_URL (default: http://arbiter-ollama:11434)
+   * - OLLAMA_BASE_URL (default: http://localhost:11434)
    * - OLLAMA_EMBEDDING_MODEL (default: nomic-embed-text)
    * - OLLAMA_TIMEOUT (default: 30000)
    * - OLLAMA_BATCH_SIZE (default: 20)
@@ -51,7 +51,7 @@ export class OllamaEmbeddingService {
   constructor(params?: { config?: Partial<OllamaEmbeddingConfig> }) {
     // Load configuration from ENV with defaults
     const baseUrl = getEnv({
-      defaultValue: 'http://arbiter-ollama:11434',
+      defaultValue: 'http://localhost:11434',
       key: 'OLLAMA_BASE_URL',
     });
     const model = getEnv({ defaultValue: 'nomic-embed-text', key: 'OLLAMA_EMBEDDING_MODEL' });

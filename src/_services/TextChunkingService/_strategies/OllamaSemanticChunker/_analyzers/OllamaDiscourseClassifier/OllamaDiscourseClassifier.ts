@@ -15,6 +15,9 @@ export interface OllamaDiscourseClassifierConfig {
   /** NLP service for LLM generation */
   nlpService: OllamaNLPService;
 
+  /** Maximum tokens for LLM response generation */
+  numPredict: number;
+
   /** Temperature for discourse analysis (low = more deterministic) */
   temperature: number;
 }
@@ -43,10 +46,12 @@ export interface OllamaDiscourseClassifierConfig {
  */
 export class OllamaDiscourseClassifier {
   private readonly nlpService: OllamaNLPService;
+  private readonly numPredict: number;
   private readonly temperature: number;
 
   constructor(config: OllamaDiscourseClassifierConfig) {
     this.nlpService = config.nlpService;
+    this.numPredict = config.numPredict;
     this.temperature = config.temperature;
   }
 
@@ -165,7 +170,7 @@ export class OllamaDiscourseClassifier {
       prompt,
       options: {
         format: schema,
-        numPredict: 150,
+        numPredict: this.numPredict,
         temperature: this.temperature,
       },
     });

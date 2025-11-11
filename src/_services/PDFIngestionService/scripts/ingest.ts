@@ -15,6 +15,10 @@
 /* eslint-disable no-console -- CLI script requires console output for user interaction */
 /* eslint-disable max-lines -- CLI script with comprehensive argument parsing and setup */
 
+// CRITICAL: Load all ENV files FIRST before any other imports
+import { loadAllEnvFiles } from '@shared/_utils';
+loadAllEnvFiles();
+
 import type { DocumentMetadata } from '../types/index.js';
 
 import { existsSync, readFileSync } from 'fs';
@@ -472,7 +476,7 @@ async function initializeServices(parsed: ParsedArgs): Promise<PDFIngestionServi
   const ollamaBaseUrl = process.env['OLLAMA_BASE_URL'] ?? 'http://localhost:11434';
 
   // Dynamic imports for semantic chunking components
-  /* eslint-disable @typescript-eslint/naming-convention, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call -- Dynamic imports require runtime loading */
+  /* eslint-disable @typescript-eslint/naming-convention -- Dynamic imports require runtime loading */
   const { OllamaProvider } = await import('../../../_agents/_shared/_lib/OllamaProvider/index.js');
   const { OllamaNLPService } = await import(
     '../../TextChunkingService/_strategies/OllamaSemanticChunker/_analyzers/OllamaNLPService/index.js'
@@ -511,25 +515,29 @@ async function initializeServices(parsed: ParsedArgs): Promise<PDFIngestionServi
     model: semanticModel,
     ollamaProvider,
   });
-  /* eslint-enable @typescript-eslint/naming-convention, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
+  /* eslint-enable @typescript-eslint/naming-convention */
 
   const topicAnalyzer = new OllamaTopicAnalyzer({
     nlpService,
+    numPredict: semanticChunkerConfig.tokenLimits.topic,
     temperature: semanticChunkerConfig.temperatures.topic,
   });
 
   const discourseClassifier = new OllamaDiscourseClassifier({
     nlpService,
+    numPredict: semanticChunkerConfig.tokenLimits.discourse,
     temperature: semanticChunkerConfig.temperatures.discourse,
   });
 
   const structureDetector = new OllamaStructureDetector({
     nlpService,
+    numPredict: semanticChunkerConfig.tokenLimits.structure,
     temperature: semanticChunkerConfig.temperatures.structure,
   });
 
   const tagExtractor = new OllamaTagExtractor({
     nlpService,
+    numPredict: semanticChunkerConfig.tokenLimits.tag,
     temperature: semanticChunkerConfig.temperatures.tag,
   });
 
@@ -577,7 +585,7 @@ async function initializeServices(parsed: ParsedArgs): Promise<PDFIngestionServi
     const model = process.env['METADATA_EXTRACTION_MODEL'] ?? 'llama3.2:3b';
     const extractorOllamaBaseUrl = process.env['OLLAMA_BASE_URL'] ?? 'http://localhost:11434';
 
-    /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call -- Dynamic imports used above */
+     
     const ollamaProvider = new OllamaProvider({
       baseUrl: extractorOllamaBaseUrl,
       model,
@@ -588,7 +596,7 @@ async function initializeServices(parsed: ParsedArgs): Promise<PDFIngestionServi
       model,
       ollamaProvider,
     });
-    /* eslint-enable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call */
+     
 
     documentMetadataExtractor = new DocumentMetadataExtractorImplementation({
       extraction: {
@@ -610,6 +618,7 @@ async function initializeServices(parsed: ParsedArgs): Promise<PDFIngestionServi
     metadataValidator,
     pdfParser,
     qdrantAdapter,
+    tagExtractor,
     textChunker,
   });
 

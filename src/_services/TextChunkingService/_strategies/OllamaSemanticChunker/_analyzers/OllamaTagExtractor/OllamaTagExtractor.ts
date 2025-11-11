@@ -15,6 +15,9 @@ export interface OllamaTagExtractorConfig {
   /** NLP service for LLM generation */
   nlpService: OllamaNLPService;
 
+  /** Maximum tokens for LLM response generation */
+  numPredict: number;
+
   /** Temperature for tag extraction (slightly higher for creativity) */
   temperature: number;
 }
@@ -46,10 +49,12 @@ export interface OllamaTagExtractorConfig {
  */
 export class OllamaTagExtractor {
   private readonly nlpService: OllamaNLPService;
+  private readonly numPredict: number;
   private readonly temperature: number;
 
   constructor(config: OllamaTagExtractorConfig) {
     this.nlpService = config.nlpService;
+    this.numPredict = config.numPredict;
     this.temperature = config.temperature;
   }
 
@@ -87,7 +92,7 @@ export class OllamaTagExtractor {
       prompt,
       options: {
         format: schema,
-        numPredict: 300,
+        numPredict: this.numPredict,
         temperature: this.temperature,
       },
     });

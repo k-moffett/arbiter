@@ -5,6 +5,8 @@
  * Coordinates multiple analyzers to create semantically coherent chunks.
  */
 
+/* eslint-disable max-lines */
+
 import type { ChunkTextParams } from '../../interfaces';
 import type { IChunkingStrategy } from '../../TextChunkingServiceImplementation';
 import type { TextChunk } from '../../types';
@@ -14,9 +16,13 @@ import type { OllamaStructureDetector } from './_analyzers/OllamaStructureDetect
 import type { OllamaTagExtractor } from './_analyzers/OllamaTagExtractor';
 import type { OllamaTopicAnalyzer } from './_analyzers/OllamaTopicAnalyzer';
 import type { SemanticChunkerConfig } from './config';
+import type { BoundaryCandidate } from './types';
 import type { BaseLogger } from '@shared/_base/BaseLogger';
 
 import { ConsoleLogger } from '@shared/_infrastructure/ConsoleLogger';
+
+import { AdaptiveThresholdCalculator } from './_analyzers/AdaptiveThresholdCalculator';
+import { EmbeddingDistanceCalculator } from './_analyzers/EmbeddingDistanceCalculator';
 
 /**
  * Ollama Semantic Chunker Configuration
@@ -142,110 +148,170 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
   }
 
   /**
-   * Analyze boundaries between sentences
+   * Analyze structure for all sentences
+   *
+   * @param params - Structure analysis parameters
+   * @param params.sentences - Array of sentences to analyze
+   * @returns Map of sentence index to atomic unit flag
+   */
+  private async analyzeAllStructure(params: {
+    sentences: Array<{ content: string; startPosition: number }>;
+  }): Promise<Map<number, boolean>> {
+    const { sentences } = params;
+    const structureMap = new Map<number, boolean>();
+
+    this.logger.info({
+      context: { totalSentences: sentences.length },
+      message: 'Starting structure analysis (Pass 2)',
+    });
+
+    for (let i = 0; i < sentences.length - 1; i++) {
+      const currentSentence = sentences[i];
+      const nextSentence = sentences[i + 1];
+
+      if (currentSentence === undefined || nextSentence === undefined) {
+        continue;
+      }
+
+      const structureBoundary = await this.structureDetector.detectStructureBoundary({
+        textBefore: currentSentence.content,
+        textAfter: nextSentence.content,
+      });
+
+      structureMap.set(i, structureBoundary.analysis.shouldKeepAtomic);
+
+      // Log progress every 100 sentences
+      if ((i + 1) % 100 === 0) {
+        this.logger.info({
+          context: {
+            current: i + 1,
+            percent: Math.round(((i + 1) / sentences.length) * 100),
+            total: sentences.length,
+          },
+          message: 'Structure analysis progress',
+        });
+      }
+    }
+
+    this.logger.info({
+      message: 'Structure analysis complete',
+    });
+
+    return structureMap;
+  }
+
+  /**
+   * Analyze boundaries between sentences using two-pass algorithm
+   *
+   * Pass 1: Calculate embeddings and identify high-distance candidates
+   * Pass 2: Run structure detection on all sentences
+   * Pass 3: Run LLM analysis (topic/discourse) only on candidates
+   *
+   * This reduces LLM calls from N*4 to ~100-200, dramatically improving performance.
    */
   private async analyzeBoundaries(params: {
     sentences: Array<{ content: string; startPosition: number }>;
   }): Promise<SentenceWithBoundary[]> {
-    const sentencesWithBoundaries: SentenceWithBoundary[] = [];
-    const totalSentences = params.sentences.length;
+    const { sentences } = params;
 
-    this.logger.debug({
-      context: { totalSentences },
-      message: 'Beginning boundary analysis loop',
+    this.logger.info({
+      context: { totalSentences: sentences.length },
+      message: 'Starting two-pass boundary analysis',
     });
 
-    for (let i = 0; i < params.sentences.length; i++) {
-      // Log progress every 10 sentences
-      if (i > 0 && i % 10 === 0) {
-        this.logger.info({
-          context: {
-            current: i,
-            percent: Math.round((i / totalSentences) * 100),
-            total: totalSentences,
-          },
-          message: 'Boundary analysis progress',
-        });
-      }
+    // PASS 1: Calculate embeddings and semantic distances
+    const embeddings = await this.batchCalculateEmbeddings({ sentences });
+    const distances = this.calculateAllSemanticDistances({ embeddings });
 
-      const currentSentence = params.sentences[i];
-      const nextSentence = params.sentences[i + 1];
+    // Identify candidates using adaptive thresholding
+    const { candidates } = this.identifyCandidates({
+      distances,
+      sentences,
+      adaptiveThresholdEnabled: true, // TODO: Load from config
+      minThreshold: 0.3, // TODO: Load from config
+      maxThreshold: 0.8, // TODO: Load from config
+      candidateLimit: 500, // TODO: Load from config
+    });
 
-      if (currentSentence === undefined) {
-        continue;
-      }
+    // PASS 2: Analyze structure for ALL sentences
+    const structureMap = await this.analyzeAllStructure({ sentences });
 
-      // Last sentence always has boundary score of 1.0 (end of document)
-      if (nextSentence === undefined) {
-        this.logger.debug({
-          message: 'Processing final sentence',
-        });
-        sentencesWithBoundaries.push({
-          boundaryScore: 1.0,
-          content: currentSentence.content,
-          isAtomic: false,
-          startPosition: currentSentence.startPosition,
-        });
-        continue;
-      }
+    // PASS 3: LLM analysis ONLY on candidates
+    const candidateAnalysis = await this.analyzeCandidatesWithLLM({ candidates });
 
-      // Log first analyzer call
-      if (i === 0) {
-        this.logger.info({
-          message: 'Starting first boundary analysis with LLM analyzers',
-        });
-      }
-
-      // Analyze boundary with all analyzers in parallel
-      const [topicBoundary, discourseBoundary, structureBoundary, semanticDistance] =
-        await Promise.all([
-          this.topicAnalyzer.detectTopicBoundary({
-            textAfter: nextSentence.content,
-            textBefore: currentSentence.content,
-          }),
-          this.discourseClassifier.detectDiscourseBoundary({
-            textAfter: nextSentence.content,
-            textBefore: currentSentence.content,
-          }),
-          this.structureDetector.detectStructureBoundary({
-            textAfter: nextSentence.content,
-            textBefore: currentSentence.content,
-          }),
-          this.calculateSemanticDistance({
-            textA: currentSentence.content,
-            textB: nextSentence.content,
-          }),
-        ]);
-
-      // Log first analyzer completion
-      if (i === 0) {
-        this.logger.info({
-          message: 'First boundary analysis complete',
-        });
-      }
-
-      // Calculate weighted boundary score
-      const boundaryScore = this.boundaryScorer.calculateBoundaryScore({
-        discourseStrength: discourseBoundary.boundaryStrength,
-        semanticDistance,
-        structureStrength: structureBoundary.boundaryStrength,
-        topicStrength: topicBoundary.boundaryStrength,
-      });
-
-      sentencesWithBoundaries.push({
-        boundaryScore: boundaryScore.weightedScore,
-        content: currentSentence.content,
-        isAtomic: structureBoundary.analysis.shouldKeepAtomic,
-        startPosition: currentSentence.startPosition,
-      });
-    }
+    // Build final sentence boundaries with weighted scores
+    const sentencesWithBoundaries = this.buildSentenceBoundaries({
+      sentences,
+      distances,
+      structureMap,
+      candidateAnalysis,
+    });
 
     this.logger.info({
       context: { totalBoundaries: sentencesWithBoundaries.length },
-      message: 'Boundary analysis complete',
+      message: 'Two-pass boundary analysis complete',
     });
 
     return sentencesWithBoundaries;
+  }
+
+  /**
+   * Analyze candidates with LLM (topic and discourse analysis)
+   *
+   * @param params - Analysis parameters
+   * @param params.candidates - Boundary candidates to analyze
+   * @returns Map of sentence index to LLM analysis results
+   */
+  private async analyzeCandidatesWithLLM(params: {
+    candidates: BoundaryCandidate[];
+  }): Promise<Map<number, { discourse: number; topic: number }>> {
+    const { candidates } = params;
+    const analysisMap = new Map<number, { discourse: number; topic: number }>();
+
+    this.logger.info({
+      context: { candidateCount: candidates.length },
+      message: 'Starting LLM analysis on candidates (Pass 3)',
+    });
+
+    for (let i = 0; i < candidates.length; i++) {
+      const candidate = candidates[i];
+      if (candidate === undefined) {
+        continue;
+      }
+
+      const [topicResult, discourseResult] = await Promise.all([
+        this.topicAnalyzer.detectTopicBoundary({
+          textBefore: candidate.text,
+          textAfter: candidate.nextText,
+        }),
+        this.discourseClassifier.detectDiscourseBoundary({
+          textBefore: candidate.text,
+          textAfter: candidate.nextText,
+        }),
+      ]);
+
+      analysisMap.set(candidate.sentenceIndex, {
+        topic: topicResult.boundaryStrength,
+        discourse: discourseResult.boundaryStrength,
+      });
+
+      if ((i + 1) % 10 === 0) {
+        this.logger.info({
+          context: {
+            current: i + 1,
+            percent: Math.round(((i + 1) / candidates.length) * 100),
+            total: candidates.length,
+          },
+          message: 'LLM analysis progress',
+        });
+      }
+    }
+
+    this.logger.info({
+      message: 'LLM analysis complete',
+    });
+
+    return analysisMap;
   }
 
   /**
@@ -270,54 +336,168 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
   }
 
   /**
-   * Calculate semantic distance between two texts using embeddings
+   * Calculate embeddings for all sentences in batch
+   *
+   * @param params - Batch embedding parameters
+   * @param params.sentences - Array of sentences to embed
+   * @returns Array of embeddings (768-dimensional vectors)
    */
-  private async calculateSemanticDistance(params: {
-    textA: string;
-    textB: string;
-  }): Promise<number> {
-    try {
-      const [embeddingA, embeddingB] = await Promise.all([
-        this.embeddingService.embed({ text: params.textA }),
-        this.embeddingService.embed({ text: params.textB }),
-      ]);
+  private async batchCalculateEmbeddings(params: {
+    sentences: Array<{ content: string; startPosition: number }>;
+  }): Promise<number[][]> {
+    const { sentences } = params;
+    const embeddings: number[][] = [];
 
-      // Calculate cosine similarity
-      const similarity = this.cosineSimilarity({ a: embeddingA, b: embeddingB });
+    this.logger.info({
+      context: { totalSentences: sentences.length },
+      message: 'Starting batch embedding calculation (Pass 1)',
+    });
 
-      // Convert similarity to distance (0 = identical, 1 = completely different)
-      return 1 - similarity;
-    } catch (error) {
-      this.logger.warn({
-        context: { error: error instanceof Error ? error.message : String(error) },
-        message: 'Failed to calculate semantic distance, using default 0.5',
-      });
-      return 0.5;
+    for (let i = 0; i < sentences.length; i++) {
+      const sentence = sentences[i];
+      if (sentence === undefined) {
+        throw new Error(`Sentence at index ${String(i)} is undefined`);
+      }
+
+      const embedding = await this.embeddingService.embed({ text: sentence.content });
+      embeddings.push(embedding);
+
+      // Log progress every 50 sentences
+      if ((i + 1) % 50 === 0) {
+        this.logger.info({
+          context: {
+            current: i + 1,
+            percent: Math.round(((i + 1) / sentences.length) * 100),
+            total: sentences.length,
+          },
+          message: 'Embedding calculation progress',
+        });
+      }
     }
+
+    this.logger.info({
+      context: { totalEmbeddings: embeddings.length },
+      message: 'Batch embedding calculation complete',
+    });
+
+    return embeddings;
   }
 
   /**
-   * Calculate cosine similarity between two vectors
+   * Build sentence boundaries with weighted scores
+   *
+   * @param params - Build parameters
+   * @param params.sentences - Original sentences
+   * @param params.distances - Semantic distances
+   * @param params.structureMap - Structure analysis results
+   * @param params.candidateAnalysis - LLM analysis results for candidates
+   * @returns Array of sentences with boundary scores
    */
-  private cosineSimilarity(params: { a: number[]; b: number[] }): number {
-    if (params.a.length !== params.b.length) {
-      return 0;
+  private buildSentenceBoundaries(params: {
+    candidateAnalysis: Map<number, { discourse: number; topic: number }>;
+    distances: number[];
+    sentences: Array<{ content: string; startPosition: number }>;
+    structureMap: Map<number, boolean>;
+  }): SentenceWithBoundary[] {
+    const { sentences, distances, structureMap, candidateAnalysis } = params;
+    const sentencesWithBoundaries: SentenceWithBoundary[] = [];
+
+    for (let i = 0; i < sentences.length; i++) {
+      const sentence = sentences[i];
+      if (sentence === undefined) {
+        continue;
+      }
+
+      // Last sentence always has boundary score of 1.0
+      if (i === sentences.length - 1) {
+        sentencesWithBoundaries.push({
+          boundaryScore: 1.0,
+          content: sentence.content,
+          isAtomic: false,
+          startPosition: sentence.startPosition,
+        });
+        continue;
+      }
+
+      // Build boundary for regular sentence
+      const boundary = this.buildSingleBoundary({
+        sentenceIndex: i,
+        sentence,
+        distances,
+        structureMap,
+        candidateAnalysis,
+      });
+      sentencesWithBoundaries.push(boundary);
     }
 
-    let dotProduct = 0;
-    let magnitudeA = 0;
-    let magnitudeB = 0;
+    return sentencesWithBoundaries;
+  }
 
-    for (let i = 0; i < params.a.length; i++) {
-      const valueA = params.a[i] ?? 0;
-      const valueB = params.b[i] ?? 0;
-      dotProduct += valueA * valueB;
-      magnitudeA += valueA * valueA;
-      magnitudeB += valueB * valueB;
-    }
+  /**
+   * Build a single sentence boundary with weighted score
+   *
+   * @param params - Build parameters
+   * @param params.sentenceIndex - Index of the sentence
+   * @param params.sentence - Sentence data
+   * @param params.distances - All semantic distances
+   * @param params.structureMap - Structure analysis results
+   * @param params.candidateAnalysis - LLM analysis results
+   * @returns Sentence with boundary score
+   */
+  private buildSingleBoundary(params: {
+    candidateAnalysis: Map<number, { discourse: number; topic: number }>;
+    distances: number[];
+    sentence: { content: string; startPosition: number };
+    sentenceIndex: number;
+    structureMap: Map<number, boolean>;
+  }): SentenceWithBoundary {
+    const { sentenceIndex, sentence, distances, structureMap, candidateAnalysis } = params;
 
-    const denominator = Math.sqrt(magnitudeA) * Math.sqrt(magnitudeB);
-    return denominator === 0 ? 0 : dotProduct / denominator;
+    const distance = distances[sentenceIndex] ?? 0;
+    const isAtomic = structureMap.get(sentenceIndex) ?? false;
+    const llmAnalysis = candidateAnalysis.get(sentenceIndex);
+
+    // Calculate weighted boundary score
+    const boundaryScore = this.boundaryScorer.calculateBoundaryScore({
+      semanticDistance: distance,
+      topicStrength: llmAnalysis?.topic ?? 0,
+      discourseStrength: llmAnalysis?.discourse ?? 0,
+      structureStrength: isAtomic ? 1.0 : 0,
+    });
+
+    return {
+      boundaryScore: boundaryScore.weightedScore,
+      content: sentence.content,
+      isAtomic,
+      startPosition: sentence.startPosition,
+    };
+  }
+
+  /**
+   * Calculate semantic distances between consecutive embeddings
+   *
+   * @param params - Distance calculation parameters
+   * @param params.embeddings - Array of sentence embeddings
+   * @returns Array of cosine distances between consecutive embeddings
+   */
+  private calculateAllSemanticDistances(params: {
+    embeddings: number[][];
+  }): number[] {
+    const { embeddings } = params;
+
+    this.logger.info({
+      message: 'Calculating semantic distances between consecutive sentences',
+    });
+
+    const distanceCalculator = new EmbeddingDistanceCalculator();
+    const distances = distanceCalculator.calculateBatchDistances({ embeddings });
+
+    this.logger.info({
+      context: { totalDistances: distances.length },
+      message: 'Semantic distance calculation complete',
+    });
+
+    return distances;
   }
 
   /**
@@ -426,6 +606,112 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
   }
 
   /**
+   * Finalize and add a sentence to the collection
+   *
+   * @param params - Finalization parameters
+   * @param params.currentSentence - Current sentence text
+   * @param params.position - Starting position
+   * @param params.sentences - Sentence collection to append to
+   */
+  private finalizeSentence(params: {
+    currentSentence: string;
+    position: number;
+    sentences: Array<{ content: string; startPosition: number }>;
+  }): void {
+    const { currentSentence, position, sentences } = params;
+    const trimmed = currentSentence.trim();
+    if (trimmed.length > 0) {
+      sentences.push({ content: trimmed, startPosition: position });
+    }
+  }
+
+  /**
+   * Identify candidate boundaries using adaptive thresholding
+   *
+   * @param params - Candidate identification parameters
+   * @param params.distances - Semantic distances between sentences
+   * @param params.sentences - Original sentences
+   * @param params.adaptiveThresholdEnabled - Whether to use adaptive thresholding
+   * @param params.minThreshold - Minimum threshold value
+   * @param params.maxThreshold - Maximum threshold value (used if adaptive disabled)
+   * @param params.candidateLimit - Maximum number of candidates
+   * @returns Array of boundary candidates and threshold used
+   */
+  private identifyCandidates(params: {
+    adaptiveThresholdEnabled: boolean;
+    candidateLimit: number;
+    distances: number[];
+    maxThreshold: number;
+    minThreshold: number;
+    sentences: Array<{ content: string; startPosition: number }>;
+  }): { candidates: BoundaryCandidate[]; threshold: number } {
+    const {
+      distances,
+      sentences,
+      adaptiveThresholdEnabled,
+      minThreshold,
+      maxThreshold,
+      candidateLimit,
+    } = params;
+
+    let threshold: number;
+
+    if (adaptiveThresholdEnabled) {
+      const thresholdCalculator = new AdaptiveThresholdCalculator();
+      threshold = thresholdCalculator.calculateThreshold({
+        distances,
+        minThreshold,
+        maxThreshold,
+        candidateBoundaryLimit: candidateLimit,
+      });
+    } else {
+      threshold = maxThreshold;
+    }
+
+    this.logger.info({
+      context: {
+        adaptiveEnabled: adaptiveThresholdEnabled,
+        threshold: threshold.toFixed(3),
+      },
+      message: 'Using threshold for candidate selection',
+    });
+
+    // Identify candidates that exceed threshold
+    const candidates: BoundaryCandidate[] = [];
+    for (let i = 0; i < distances.length; i++) {
+      const distance = distances[i];
+      if (distance === undefined) {
+        continue;
+      }
+
+      const sentence = sentences[i];
+      const nextSentence = sentences[i + 1];
+      if (sentence === undefined || nextSentence === undefined) {
+        continue;
+      }
+
+      if (distance >= threshold) {
+        candidates.push({
+          sentenceIndex: i,
+          embeddingDistance: distance,
+          text: sentence.content,
+          nextText: nextSentence.content,
+        });
+      }
+    }
+
+    this.logger.info({
+      context: {
+        candidateCount: candidates.length,
+        totalBoundaries: distances.length,
+      },
+      message: 'Pass 1 complete - candidates identified',
+    });
+
+    return { candidates, threshold };
+  }
+
+  /**
    * Link chunks with bidirectional relationships
    */
   private linkChunks(params: { chunks: TextChunk[] }): TextChunk[] {
@@ -511,11 +797,12 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
       // Check if this part is a delimiter (ends with punctuation)
       if (/^[.!?]+\s*$/.test(part)) {
         currentSentence += part;
-        const trimmed = currentSentence.trim();
-        if (trimmed.length > 0) {
-          sentences.push({ content: trimmed, startPosition: position });
-          position += currentSentence.length;
-        }
+        this.finalizeSentence({
+          currentSentence,
+          position,
+          sentences,
+        });
+        position += currentSentence.length;
         currentSentence = '';
       } else {
         currentSentence += part;
@@ -523,9 +810,11 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
     }
 
     // Handle any remaining text
-    if (currentSentence.trim().length > 0) {
-      sentences.push({ content: currentSentence.trim(), startPosition: position });
-    }
+    this.finalizeSentence({
+      currentSentence,
+      position,
+      sentences,
+    });
 
     this.logger.info({
       context: { sentenceCount: sentences.length },

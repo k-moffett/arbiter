@@ -15,6 +15,9 @@ export interface OllamaStructureDetectorConfig {
   /** NLP service for LLM generation */
   nlpService: OllamaNLPService;
 
+  /** Maximum tokens for LLM response generation */
+  numPredict: number;
+
   /** Temperature for structure analysis (low = more deterministic) */
   temperature: number;
 }
@@ -43,10 +46,12 @@ export interface OllamaStructureDetectorConfig {
  */
 export class OllamaStructureDetector {
   private readonly nlpService: OllamaNLPService;
+  private readonly numPredict: number;
   private readonly temperature: number;
 
   constructor(config: OllamaStructureDetectorConfig) {
     this.nlpService = config.nlpService;
+    this.numPredict = config.numPredict;
     this.temperature = config.temperature;
   }
 
@@ -107,7 +112,7 @@ export class OllamaStructureDetector {
       prompt,
       options: {
         format: schema,
-        numPredict: 150,
+        numPredict: this.numPredict,
         temperature: this.temperature,
       },
     });

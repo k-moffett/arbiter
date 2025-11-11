@@ -15,6 +15,9 @@ export interface OllamaTopicAnalyzerConfig {
   /** NLP service for LLM generation */
   nlpService: OllamaNLPService;
 
+  /** Maximum tokens for LLM response generation */
+  numPredict: number;
+
   /** Temperature for topic analysis (low = more deterministic) */
   temperature: number;
 }
@@ -41,10 +44,12 @@ export interface OllamaTopicAnalyzerConfig {
  */
 export class OllamaTopicAnalyzer {
   private readonly nlpService: OllamaNLPService;
+  private readonly numPredict: number;
   private readonly temperature: number;
 
   constructor(config: OllamaTopicAnalyzerConfig) {
     this.nlpService = config.nlpService;
+    this.numPredict = config.numPredict;
     this.temperature = config.temperature;
   }
 
@@ -143,7 +148,7 @@ export class OllamaTopicAnalyzer {
       prompt,
       options: {
         format: schema,
-        numPredict: 120,
+        numPredict: this.numPredict,
         temperature: this.temperature,
       },
     });

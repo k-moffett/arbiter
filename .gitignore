@@ -18,6 +18,10 @@ build/
 .env.test.local
 .env.production.local
 
+# Domain-specific environment configurations
+env/.env.*
+!env/.env.*.example
+
 # IDE files
 .vscode/
 .idea/

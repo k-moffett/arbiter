@@ -8,7 +8,7 @@
  * Configuration for Ollama Embedding Service
  */
 export interface OllamaEmbeddingConfig {
-  /** Ollama base URL (default: http://arbiter-ollama:11434) */
+  /** Ollama base URL (default: http://localhost:11434) */
   baseUrl: string;
 
   /** Batch size for processing multiple texts (default: 20) */

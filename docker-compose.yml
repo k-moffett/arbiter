@@ -67,7 +67,7 @@ services:
       - OLLAMA_NUM_PARALLEL=${OLLAMA_NUM_PARALLEL:-2}
       - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-2}
       - OLLAMA_FLASH_ATTENTION=${OLLAMA_FLASH_ATTENTION:-1}
-      - CUDA_VISIBLE_DEVICES=0
+      - CUDA_VISIBLE_DEVICES=0,1
       - OLLAMA_DEBUG=${OLLAMA_DEBUG:-false}
     logging:
       driver: "json-file"
@@ -81,7 +81,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0']
+              device_ids: ['0', '1']
               capabilities: [gpu]
           memory: ${OLLAMA_MEMORY_RESERVATION:-8G}
         limits:
@@ -100,6 +100,8 @@ services:
     ports:
       - "3100:3100"
     environment:
+      # Override .env URLs for container-to-container communication
+      - OLLAMA_BASE_URL=http://ollama:11434
       - QDRANT_URL=http://qdrant:6333
       - AGENT_ORCHESTRATOR_URL=${AGENT_ORCHESTRATOR_URL:-http://agent-orchestrator:3200}
       - TRANSPORT=${TRANSPORT:-streamable-http}
@@ -150,8 +152,10 @@ services:
     ports:
       - "3200:3200"
     environment:
-      - MCP_SERVER_URL=${MCP_SERVER_URL:-http://mcp-server:3100}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      # Override .env URLs for container-to-container communication
+      - MCP_SERVER_URL=http://mcp-server:3100
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - QDRANT_URL=http://qdrant:6333
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-180000}
       - LLM_MODEL=${LLM_MODEL:-llama3.1:8b}
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-nomic-embed-text}

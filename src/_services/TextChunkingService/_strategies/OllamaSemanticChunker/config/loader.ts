@@ -68,6 +68,21 @@ function loadTemperatures(): SemanticChunkerConfig['temperatures'] {
 }
 
 /**
+ * Load token limits from environment
+ *
+ * Generous defaults ensure ANY PDF can be processed without truncation.
+ * Philosophy: Accuracy > Speed
+ */
+function loadTokenLimits(): SemanticChunkerConfig['tokenLimits'] {
+  return {
+    structure: parseInt(process.env['OLLAMA_STRUCTURE_NUM_PREDICT'] ?? '500', 10),
+    tag: parseInt(process.env['OLLAMA_TAG_NUM_PREDICT'] ?? '500', 10),
+    topic: parseInt(process.env['OLLAMA_TOPIC_NUM_PREDICT'] ?? '300', 10),
+    discourse: parseInt(process.env['OLLAMA_DISCOURSE_NUM_PREDICT'] ?? '400', 10),
+  };
+}
+
+/**
  * Load threshold configuration from environment
  */
 function loadThresholds(): {
@@ -137,11 +152,18 @@ function validateWeightSum(params: {
   }
 }
 
+/**
+ * Load semantic chunker configuration from environment variables
+ *
+ * NOTE: Assumes loadAllEnvFiles() has been called at application startup.
+ * All ENV files (including env/.env.text-chunking) should already be loaded.
+ */
 export function loadSemanticChunkerConfig(): SemanticChunkerConfig {
   return {
     ...loadChunkSizes(),
     models: loadModels(),
     temperatures: loadTemperatures(),
+    tokenLimits: loadTokenLimits(),
     weights: loadWeights(),
     ...loadThresholds(),
   };
