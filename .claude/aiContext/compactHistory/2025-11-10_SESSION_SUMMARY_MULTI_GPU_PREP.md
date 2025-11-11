@@ -85,13 +85,13 @@ Successfully verified that semantic chunking with tag extraction is working corr
 - Status: ✅ Working, models loaded successfully
 
 **GPU 1 (Newly Available):**
-- Model: NVIDIA GeForce RTX 4070 (assumed matching)
-- VRAM: 12.0 GB (estimated)
+- Model: NVIDIA GeForce RTX 2060
+- VRAM: 6.0 GB
 - Status: ⏭️ Not yet configured (will be active after restart)
 
 **Combined Capacity:**
-- Total VRAM: 24 GB
-- Optimal for: Running qwen2.5:32b (20GB) + qwen2.5:14b (10GB) simultaneously
+- Total VRAM: 18 GB
+- Optimal for: Running qwen2.5:14b (10GB) on GPU 0 + llama3.1:8b (5GB) on GPU 1
 
 ### Available Models
 
@@ -107,11 +107,11 @@ Successfully verified that semantic chunking with tag extraction is working corr
 
 **Optimal Configuration:**
 ```yaml
-# GPU 0: Primary LLM (topic, discourse, boundary detection)
-OLLAMA_SEMANTIC_CHUNKER_MODEL=qwen2.5:32b (20GB)
+# GPU 0 (RTX 4070 - 12GB): Primary LLM
+OLLAMA_SEMANTIC_CHUNKER_MODEL=qwen2.5:14b (10GB)
 
-# GPU 1: Secondary LLM (tag extraction) - potential future optimization
-OLLAMA_TAG_EXTRACTION_MODEL=qwen2.5:14b (10GB)
+# GPU 1 (RTX 2060 - 6GB): Metadata & Validation
+METADATA_EXTRACTION_MODEL=llama3.1:8b (5GB)
 
 # Both GPUs: Embeddings (lightweight)
 OLLAMA_EMBEDDING_MODEL=nomic-embed-text (500MB)

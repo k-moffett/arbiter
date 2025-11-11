@@ -148,66 +148,14 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
   }
 
   /**
-   * Analyze structure for all sentences
+   * Analyze boundaries between sentences using three-pass algorithm
    *
-   * @param params - Structure analysis parameters
-   * @param params.sentences - Array of sentences to analyze
-   * @returns Map of sentence index to atomic unit flag
-   */
-  private async analyzeAllStructure(params: {
-    sentences: Array<{ content: string; startPosition: number }>;
-  }): Promise<Map<number, boolean>> {
-    const { sentences } = params;
-    const structureMap = new Map<number, boolean>();
-
-    this.logger.info({
-      context: { totalSentences: sentences.length },
-      message: 'Starting structure analysis (Pass 2)',
-    });
-
-    for (let i = 0; i < sentences.length - 1; i++) {
-      const currentSentence = sentences[i];
-      const nextSentence = sentences[i + 1];
-
-      if (currentSentence === undefined || nextSentence === undefined) {
-        continue;
-      }
-
-      const structureBoundary = await this.structureDetector.detectStructureBoundary({
-        textBefore: currentSentence.content,
-        textAfter: nextSentence.content,
-      });
-
-      structureMap.set(i, structureBoundary.analysis.shouldKeepAtomic);
-
-      // Log progress every 100 sentences
-      if ((i + 1) % 100 === 0) {
-        this.logger.info({
-          context: {
-            current: i + 1,
-            percent: Math.round(((i + 1) / sentences.length) * 100),
-            total: sentences.length,
-          },
-          message: 'Structure analysis progress',
-        });
-      }
-    }
-
-    this.logger.info({
-      message: 'Structure analysis complete',
-    });
-
-    return structureMap;
-  }
-
-  /**
-   * Analyze boundaries between sentences using two-pass algorithm
+   * Pass 1: Calculate embeddings and identify high-distance candidates (semantic distance threshold)
+   * Pass 2: Run structure detection on boundary candidates only (atomic structures: tables, Q&A pairs)
+   * Pass 3: Run LLM analysis (topic/discourse) on boundary candidates only
    *
-   * Pass 1: Calculate embeddings and identify high-distance candidates
-   * Pass 2: Run structure detection on all sentences
-   * Pass 3: Run LLM analysis (topic/discourse) only on candidates
-   *
-   * This reduces LLM calls from N*4 to ~100-200, dramatically improving performance.
+   * This reduces LLM calls from N*4 to ~200-500 (typically ~98% reduction), dramatically improving performance
+   * while maintaining accuracy by focusing analysis on the most likely boundary points.
    */
   private async analyzeBoundaries(params: {
     sentences: Array<{ content: string; startPosition: number }>;
@@ -233,8 +181,8 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
       candidateLimit: 500, // TODO: Load from config
     });
 
-    // PASS 2: Analyze structure for ALL sentences
-    const structureMap = await this.analyzeAllStructure({ sentences });
+    // PASS 2: Analyze structure for boundary candidates only
+    const structureMap = await this.analyzeCandidateStructure({ candidates });
 
     // PASS 3: LLM analysis ONLY on candidates
     const candidateAnalysis = await this.analyzeCandidatesWithLLM({ candidates });
@@ -253,6 +201,62 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
     });
 
     return sentencesWithBoundaries;
+  }
+
+  /**
+   * Analyze structure for boundary candidates only
+   *
+   * This method analyzes only the high-distance boundary candidates identified in Pass 1,
+   * rather than all sentences. This significantly reduces processing time while maintaining
+   * accuracy for detecting atomic structures (tables, Q&A pairs, etc.).
+   *
+   * @param params - Structure analysis parameters
+   * @param params.candidates - Array of boundary candidates to analyze
+   * @returns Map of sentence index to atomic unit flag
+   */
+  private async analyzeCandidateStructure(params: {
+    candidates: BoundaryCandidate[];
+  }): Promise<Map<number, boolean>> {
+    const { candidates } = params;
+    const structureMap = new Map<number, boolean>();
+
+    this.logger.info({
+      context: { candidateCount: candidates.length },
+      message: 'Starting structure analysis on candidates (Pass 2)',
+    });
+
+    for (let i = 0; i < candidates.length; i++) {
+      const candidate = candidates[i];
+
+      if (candidate === undefined) {
+        continue;
+      }
+
+      const structureBoundary = await this.structureDetector.detectStructureBoundary({
+        textBefore: candidate.text,
+        textAfter: candidate.nextText,
+      });
+
+      structureMap.set(candidate.sentenceIndex, structureBoundary.analysis.shouldKeepAtomic);
+
+      // Log progress every 20 candidates
+      if ((i + 1) % 20 === 0) {
+        this.logger.debug({
+          context: {
+            current: i + 1,
+            percent: Math.round(((i + 1) / candidates.length) * 100),
+            total: candidates.length,
+          },
+          message: 'Structure analysis progress',
+        });
+      }
+    }
+
+    this.logger.info({
+      message: 'Structure analysis complete',
+    });
+
+    return structureMap;
   }
 
   /**
@@ -296,7 +300,7 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
       });
 
       if ((i + 1) % 10 === 0) {
-        this.logger.info({
+        this.logger.debug({
           context: {
             current: i + 1,
             percent: Math.round(((i + 1) / candidates.length) * 100),
@@ -364,7 +368,7 @@ export class OllamaSemanticChunker implements IChunkingStrategy {
 
       // Log progress every 50 sentences
       if ((i + 1) % 50 === 0) {
-        this.logger.info({
+        this.logger.debug({
           context: {
             current: i + 1,
             percent: Math.round(((i + 1) / sentences.length) * 100),

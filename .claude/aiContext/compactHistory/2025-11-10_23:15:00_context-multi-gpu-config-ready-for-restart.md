@@ -38,8 +38,8 @@
 
 **Detected Configuration:**
 - **GPU 0**: NVIDIA GeForce RTX 4070 (12GB VRAM, Compute 8.9, CUDA 13.0) - Active
-- **GPU 1**: NVIDIA GeForce RTX 4070 (12GB VRAM, assumed matching) - Available
-- **Total VRAM**: 24GB across 2 GPUs
+- **GPU 1**: NVIDIA GeForce RTX 2060 (6GB VRAM, Compute 7.5, CUDA 13.0) - Active
+- **Total VRAM**: 18GB across 2 GPUs
 - **Status**: Single GPU active (GPU 0), multi-GPU configured but requires restart
 
 **From Ollama Logs:**
@@ -56,7 +56,7 @@ total="12.0 GiB" available="10.8 GiB"
 | qwen2.5:14b | 10GB | ⭐⭐⭐⭐ 90%+ | Medium | ⭐⭐⭐⭐ 90%+ |
 | llama3.1:8b | 5.5GB | ⭐⭐⭐ 85%+ | Coarse | ⭐⭐⭐ 85%+ |
 
-**Conclusion:** qwen2.5:32b is optimal for 2x RTX 4070 setup (highest quality, fits in 24GB total)
+**Conclusion:** qwen2.5:14b is optimal for RTX 4070+2060 setup (excellent quality, fits in 12GB on 4070)
 
 ---
 

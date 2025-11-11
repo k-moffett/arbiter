@@ -64,8 +64,8 @@ services:
       - OLLAMA_MAX_LOADED_MODELS=${OLLAMA_MAX_LOADED_MODELS:-2}
       # Enable Flash Attention for faster inference
       - OLLAMA_FLASH_ATTENTION=${OLLAMA_FLASH_ATTENTION:-1}
-      # RTX 4070 is the first GPU (device 0)
-      - CUDA_VISIBLE_DEVICES=0
+      # Both GPUs: RTX 4070 (GPU 0) + RTX 2060 (GPU 1)
+      - CUDA_VISIBLE_DEVICES=0,1
       # Debug logging (set via env var, default false)
       - OLLAMA_DEBUG=${OLLAMA_DEBUG:-false}
     logging:
@@ -80,7 +80,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0']  # RTX 4070
+              device_ids: ['0', '1']  # RTX 4070 + RTX 2060
               capabilities: [gpu]
           memory: ${OLLAMA_MEMORY_RESERVATION:-4G}
         limits:
